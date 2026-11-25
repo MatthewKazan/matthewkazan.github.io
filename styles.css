@@ -162,7 +162,7 @@ h1 { font-size: clamp(3rem, 5.6vw, 6.1rem); margin-top: 15px; }
 .play { flex: 0 0 auto; min-width: 56px; height: 34px; padding-inline: 7px; font-size: 0.78rem; }
 .play:hover, .light-button:hover { background: white; }
 #frame { appearance: none; -webkit-appearance: none; min-width: 0; width: 100%; background: transparent; cursor: pointer; height: 24px; touch-action: pan-y; }
-#frame::-webkit-slider-runnable-track { height: 4px; border-radius: 10px; background: linear-gradient(to right, #91b0ee var(--progress, 0%), #31425d var(--progress, 0%)); }
+#frame::-webkit-slider-runnable-track { height: 4px; border-radius: 10px; background: linear-gradient(to right, #91b0ee var(--progress, 0%), #31425d var(--progress, 0%) var(--loaded, 100%), #1d283b var(--loaded, 100%)); }
 #frame::-webkit-slider-thumb {
   appearance: none;
   -webkit-appearance: none;

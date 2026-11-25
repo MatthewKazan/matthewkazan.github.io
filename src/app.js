@@ -51,8 +51,13 @@ function updateReplay() {
   const solved = comparing && correction === 1;
   const adjustment = finished && corrected ? { poses: corrected, amount: comparing ? correction : 1 } : null;
   describePoints(viewer.setVisible(replayIndex, recording.initial, adjustment));
+  // The scrubber spans the whole replay; frames still being registered show as
+  // an unfilled stretch of the track.
+  const span = Math.max(1, recording.total - 1);
+  frame.max = String(recording.total);
   frame.value = String(replayIndex);
-  frame.style.setProperty('--progress', (100 * (replayIndex - 1) / Math.max(1, length - 1)) + '%');
+  frame.style.setProperty('--progress', (100 * (replayIndex - 1) / span) + '%');
+  frame.style.setProperty('--loaded', (100 * (length - 1) / span) + '%');
   byId('frame-count').value = replayIndex + ' / ' + recording.total;
   byId('loop-comparison').hidden = byId('loop-overview').hidden = !comparing;
   sensorPreview.hidden = comparing;
@@ -140,7 +145,6 @@ function loadReplay() {
   viewer.clear();
   for (const sample of recording.frames) viewer.addFrame(sample);
   if (maps) viewer.setReplayMaps(maps);
-  frame.max = String(recording.frames.length);
   frame.disabled = false;
   play.disabled = false;
   updateReplay();
@@ -177,12 +181,12 @@ function startReplayWorker() {
           if (!followProgress) setPlaying(true);
         } else {
           for (const sample of data.frames) viewer.addFrame(sample);
-          frame.max = String(recording.frames.length);
           updateReplay();
         }
       }
     } else if (data.type === 'complete') {
       recording.complete = true;
+      recording.total = recording.frames.length;
       recording.initial = data.initial;
       recording.loop = data.loop;
       corrected = data.corrected;
@@ -261,8 +265,9 @@ try {
     setPlaying(!timer);
   });
   frame.addEventListener('input', () => {
-    followProgress = false;
-    replayIndex = frame.valueAsNumber;
+    // Past the registered frames, show the newest one and keep following.
+    followProgress = frame.valueAsNumber >= recording.frames.length && !recording.complete;
+    replayIndex = Math.min(frame.valueAsNumber, recording.frames.length);
     cancelClosureAnimation();
     correction = 0;
     if (recording.complete && replayIndex === recording.frames.length) finishReplay();
