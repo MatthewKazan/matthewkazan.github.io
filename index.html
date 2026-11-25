@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7f2">
+  <meta name="description" content="Matthew Kazan’s engineering portfolio. Explore an interactive SLAM map, learned visual pose estimation, warehouse robotics, and hardware automation.">
+  <title>Matthew Kazan · Robotics &amp; Perception</title>
+  <link rel="icon" href="./assets/mk.png" type="image/png">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./src/app.js"></script>
+</head>
+<body>
+  <a href="#main" class="skip">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="identity" href="./" aria-label="Matthew Kazan, home"><b aria-hidden="true">MK</b> <span>Matthew Kazan</span></a>
+      <nav aria-label="Main navigation">
+        <a href="#mapping">Map demo</a>
+        <a href="#work">Selected work</a>
+        <a class="nav-github" href="https://github.com/MatthewKazan">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" id="mapping" aria-labelledby="mapping-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="signal" aria-hidden="true"></span> Robotics &amp; perception</p>
+        <h1 id="mapping-title">Mapping a room<br class="wide-break"> with an iPhone.</h1>
+        <p class="intro">My iPhone LiDAR project builds a 3D map as the camera moves. In this browser demo, watch GTSAM correct the map when the camera returns to where it started.</p>
+        <a class="text-link" href="https://github.com/MatthewKazan/iPhone-lidar-slam-playground">Explore the SLAM project <span aria-hidden="true">↗</span></a>
+      </div>
+
+      <div class="demo" id="map-demo" aria-label="Interactive SLAM map">
+        <div class="demo-top">
+          <div class="demo-title"><span class="demo-signal" aria-hidden="true"></span> Map builder</div>
+          <div role="group" class="mode-switch" aria-label="Map input">
+            <button type="button" data-mode="replay" aria-pressed="true">Replay</button>
+            <button type="button" data-mode="camera" aria-pressed="false">Camera</button>
+          </div>
+        </div>
+        <div class="viewport">
+          <canvas id="map" tabindex="0" aria-label="3D point cloud. Drag or use arrow keys to orbit. Use plus or minus to zoom."></canvas>
+          <div class="map-overlay">
+            <span id="map-state"><span class="state-dot" aria-hidden="true"></span><span id="state-text">Loading example</span></span>
+            <button class="reset" id="reset-view" type="button" aria-label="Reset view" title="Reset view"><span aria-hidden="true">⤾</span></button>
+          </div>
+          <div class="map-overlay-bottom">
+            <div class="axis" aria-hidden="true"><span></span><span></span><span></span></div>
+            <span class="map-hint" id="map-hint">Drag to orbit · Scroll to zoom</span>
+          </div>
+          <video id="camera-preview" autoplay playsinline muted hidden aria-label="Local camera preview"></video>
+          <div id="camera-prompt" class="map-message" hidden>
+            <strong>Map with your camera</strong>
+            <p>Capture overlapping views. MoGe‑2 estimates depth from each RGB frame on your device.</p>
+            <button id="enable-camera" type="button" class="light-button">Enable camera</button>
+            <small>141 MB depth model on first use. Camera frames stay in this tab.</small>
+          </div>
+          <div id="map-fallback" class="map-message" hidden>
+            <strong>Interactive map unavailable</strong>
+            <p>This browser needs WebGL 2 to draw the point cloud.</p>
+          </div>
+        </div>
+        <div class="demo-controls" id="replay-controls">
+          <div class="playback">
+            <button type="button" class="play" id="play" aria-label="Play replay" disabled><span aria-hidden="true">▶</span></button>
+            <label class="sr-only" for="frame">Replay frame</label>
+            <input type="range" id="frame" min="1" max="30" value="1" disabled>
+            <output id="frame-count" for="frame">0 / 30</output>
+          </div>
+          <button type="button" class="closure" id="loop-toggle" aria-pressed="true" disabled title="Turn loop-closure correction on or off at the end of the replay">
+            <span class="switch" aria-hidden="true"></span> Loop closure
+          </button>
+        </div>
+        <div class="demo-controls camera-controls" id="camera-controls" hidden>
+          <button type="button" class="light-button" id="capture" disabled>Capture frame</button>
+          <button type="button" class="quiet-button" id="stop-camera" disabled>Stop camera</button>
+          <span id="camera-frame-count">0 frames</span>
+        </div>
+        <div class="demo-footer">
+          <span id="demo-description">Simulated RGB-D · GTSAM in WebAssembly</span>
+          <span id="point-count">— points</span>
+        </div>
+        <p class="camera-feedback" id="camera-feedback" role="status" hidden></p>
+      </div>
+    </section>
+
+    <section class="wrap map-notes" aria-label="SLAM project details">
+      <p><b>Depth to map.</b> The original system streamed iPhone LiDAR depth into ROS 2, registered point clouds, and used a factor graph to refine camera poses.</p>
+      <p><b>Native to browser.</b> On a 216-frame LiDAR recording, GTSAM 4.3.0 matched the native 4.3.0 solve to numerical precision on all nine saved pose graphs.</p>
+    </section>
+
+    <section class="work" id="work" aria-labelledby="work-title">
+      <div class="wrap">
+        <div class="section-heading">
+          <h2 id="work-title">Selected work</h2>
+          <span aria-hidden="true"></span>
+        </div>
+        <article class="vision">
+          <div class="vision-copy">
+            <p class="eyebrow">Computer vision &amp; SLAM</p>
+            <h3>Learned Visual Pose</h3>
+            <p>I built a C++/Eigen pose pipeline and trained a Transformer to refine SLAM pose graphs. I also trained a convolutional descriptor for matching image features across views.</p>
+            <dl class="metrics">
+              <div><dt>48%</dt><dd>lower mean trajectory error than robust Gauss–Newton on 100 validation graphs with injected faults</dd></div>
+              <div><dt>70.7%</dt><dd>of CNN matches within 8 px, compared with 58.2% for SIFT on one held-out TartanAir sequence</dd></div>
+            </dl>
+            <a class="text-link" href="https://github.com/MatthewKazan/learned_visual_pose">View project <span aria-hidden="true">↗</span></a>
+          </div>
+          <figure class="vision-figure">
+            <a href="./assets/vision-matching.webp" aria-label="Open full-size SIFT and CNN feature-matching comparison">
+              <img src="./assets/vision-matching.webp" loading="lazy" width="1450" height="1009" alt="SIFT and learned CNN correspondence lines on the same pair of TartanAir frames, with similarity and descriptor maps.">
+            </a>
+            <figcaption>Feature-matching comparison. <a href="https://theairlab.org/tartanair-dataset/#term-of-use">TartanAir</a> frames by Wang et al. · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>
+          </figure>
+        </article>
+        <details class="benchmark">
+          <summary>See the classical trajectory benchmark</summary>
+          <figure>
+            <img loading="lazy" src="./assets/vision-trajectory.webp" width="1200" height="361" alt="Estimated and reference paths on a TartanAir sequence, with plots of pose error over time.">
+            <figcaption>Classical pose-estimation baseline on <a href="https://theairlab.org/tartanair-dataset/#term-of-use">TartanAir</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>
+          </figure>
+        </details>
+
+        <div class="hardware-grid">
+          <article class="hardware">
+            <figure>
+              <div class="hardware-image array-media">
+                <iframe title="Locus Array operating at DHL" src="https://www.youtube-nocookie.com/embed/nfoUnPKn5tY" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+              </div>
+              <figcaption>Array at DHL · Locus Robotics via Business Wire</figcaption>
+            </figure>
+            <div class="hardware-copy">
+              <p class="eyebrow">Robotics Test Engineer</p>
+              <h3>Locus Robotics</h3>
+              <p>Array combines an autonomous mobile base, machine vision, and a robotic arm to pick warehouse inventory.</p>
+              <details class="array-photo">
+                <summary>See the Array photo</summary>
+                <iframe title="Locus Robotics’ photo of Array in a warehouse aisle" src="https://www.linkedin.com/embed/feed/update/urn:li:activity:7445530673370714112" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                <a class="text-link" href="https://www.linkedin.com/posts/locus-robotics_modex2026-warehouseautomation-supplychain-activity-7445530673370714112-KgXn">Open the Locus Robotics post <span aria-hidden="true">↗</span></a>
+              </details>
+            </div>
+          </article>
+          <article class="hardware">
+            <figure>
+              <div class="hardware-image"><a href="./assets/twelve-test-cell.webp" aria-label="Open photo of Twelve's CO₂ electrolysis test cell"><img src="./assets/twelve-test-cell.webp" loading="lazy" width="664" height="443" alt="A team member holds a CO₂ electrolysis test cell in the lab."></a></div>
+              <figcaption>A test cell from Twelve, then Opus 12. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC8237472/#dfig2">Heidi Lim, <i>iScience</i></a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>
+            </figure>
+            <div class="hardware-copy">
+              <p class="eyebrow">Hardware Automation Co-op</p>
+              <h3>Twelve</h3>
+              <p>I developed software for CO₂ electrolysis test stands, improved data acquisition and instrument control, and built hardware-in-the-loop tests and anomaly detection.</p>
+              <a class="text-link" href="https://www.twelve.co/">Explore Twelve <span aria-hidden="true">↗</span></a>
+            </div>
+          </article>
+        </div>
+        <article class="embedded">
+          <a href="./assets/fencing-circuit.webp" aria-label="Open the full wireless fencing circuit diagram"><img src="./assets/fencing-circuit.webp" width="960" height="624" loading="lazy" alt="Circuit diagram showing an ESP32, the épée connection, and the buzzer and indicator LED."></a>
+          <div>
+            <p class="eyebrow">Embedded systems</p>
+            <h3>Wireless fencing scoring</h3>
+            <p>I prototyped a portable épée scoring system with ESP32 firmware, an LED and buzzer circuit, and a 3D-printed enclosure. The two units communicate using ESP-NOW.</p>
+            <a class="text-link" href="https://github.com/MatthewKazan/Bluetooth-Fencing-Scoring-System">View circuit and firmware <span aria-hidden="true">↗</span></a>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap footer-inner">
+      <b>Matthew Kazan</b>
+      <div><a href="https://github.com/MatthewKazan">GitHub <span aria-hidden="true">↗</span></a><a href="https://www.linkedin.com/in/matthew-kazan">LinkedIn <span aria-hidden="true">↗</span></a></div>
+    </div>
+  </footer>
+</body>
+</html>
