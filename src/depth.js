@@ -109,7 +109,7 @@ export async function loadDepthModel(weights, progress, forceWasm, singleThread 
         graphOptimizationLevel: 'all',
       });
       progress('Depth model ready' + (provider === 'wasm' ? ' · CPU · ' + threads + (threads > 1 ? ' threads' : ' thread') : ' · GPU'));
-      return { session, ort, provider };
+      return { session, ort, provider, threads: provider === 'wasm' ? threads : 0 };
     } catch (error) {
       cause = error;
     }

@@ -1,5 +1,5 @@
-import { depthInputSize } from './depth.js?v=9';
-import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=9';
+import { depthInputSize } from './depth.js?v=10';
+import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=10';
 import { drawLoopOverview } from './loop-overview.js?v=6';
 
 const workerTimeout = 60_000;
@@ -79,7 +79,9 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     const captured = recording?.captured ?? 0;
     const queued = captured - (recording?.processed ?? 0);
     const mapped = recording?.samples.length ?? 0;
-    const count = captured + ' captured · ' + queued + ' queued · ' + mapped + ' mapped';
+    // Shows which depth engine is running, e.g. "CPU ×4" when threads are available.
+    const engine = recording?.engine ? ' · ' + recording.engine : '';
+    const count = captured + ' captured · ' + queued + ' queued · ' + mapped + ' mapped' + engine;
     if (counter.textContent !== count) counter.textContent = count;
     if (depthStatus.textContent !== modelStatus) depthStatus.textContent = modelStatus;
     start.hidden = phase === 'opening' || phase === 'recording' || phase === 'draining';
@@ -326,6 +328,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     scan.stage = '';
     if (data.type === 'ready') {
       scan.ready = true;
+      if (data.provider) scan.engine = data.provider === 'wasm' ? 'CPU ×' + data.threads : 'GPU';
     } else if (data.type === 'frame' || data.type === 'skipped') {
       scan.waiting = false;
       scan.processed++;

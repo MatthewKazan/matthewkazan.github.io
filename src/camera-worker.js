@@ -1,4 +1,4 @@
-import { downloadDepthModel, estimateCloud, loadDepthModel, removeCachedDepthModel } from './depth.js?v=9';
+import { downloadDepthModel, estimateCloud, loadDepthModel, removeCachedDepthModel } from './depth.js?v=10';
 import { initGtsam } from './poses.js?v=6';
 import { viewingPoints, viewingPose } from './sensor-frame.js?v=6';
 import { SlamPipeline } from './slam-pipeline.js?v=9';
@@ -93,7 +93,7 @@ self.onmessage = ({ data }) => {
     prepare().then(({ depth, gtsam }) => {
       if (activeScan !== scan) return;
       scan.slam = new SlamPipeline(gtsam, { pointThreshold: 10_000, cameraTracking: true });
-      send(scan, 'ready', { provider: depth.provider });
+      send(scan, 'ready', { provider: depth.provider, threads: depth.threads });
     }).catch((error) => {
       send(scan, 'error', { message: error.message });
     });

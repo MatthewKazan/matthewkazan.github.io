@@ -83,7 +83,7 @@ async function cameraFixture(t) {
     });
   }
 
-  const { createCameraRecorder } = await import('../src/camera.js?v=12');
+  const { createCameraRecorder } = await import('../src/camera.js?v=13');
   const setState = t.mock.fn();
   const recorder = createCameraRecorder({
     viewer: { clear() {}, addFrame() {}, setVisible() { return 0; } },
@@ -192,7 +192,7 @@ test('a silent worker is replaced and retry can reload the model without droppin
 });
 
 test('device orientation maps to the rear camera frame used by the scans', async () => {
-  const { cameraOrientation } = await import('../src/camera.js?v=12');
+  const { cameraOrientation } = await import('../src/camera.js?v=13');
   const { rotationMatrix } = await import('../src/registration.js?v=6');
   const axes = (event, angle) => {
     const m = rotationMatrix(cameraOrientation(event, angle));
