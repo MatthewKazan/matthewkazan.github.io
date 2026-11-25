@@ -1,8 +1,8 @@
 import { cloudFromDepth, downloadDepthModel, estimateCloud, loadDepthModel, removeCachedDepthModel } from './depth.js?v=11';
 import { initGtsam } from './poses.js?v=6';
 import { viewingPoints, viewingPose } from './sensor-frame.js?v=6';
-import { SlamPipeline } from './slam-pipeline.js?v=10';
-import { grayscale, VisualOdometry } from './visual-odometry.js?v=1';
+import { SlamPipeline } from './slam-pipeline.js?v=11';
+import { grayscale, VisualOdometry } from './visual-odometry.js?v=2';
 
 let download;
 let preparation;
@@ -62,13 +62,15 @@ function resetTracking(scan, gtsam) {
 // Tracks one frame with visual odometry and adds its scaled cloud to the map.
 function mapFrame(scan, { rgba, depth, width, height, orientation }, replay = false) {
   const intrinsics = scan.calibration.get(width + 'x' + height);
-  const result = scan.vo.process({ gray: grayscale(rgba, width, height), depth, width, height, intrinsics, orientation });
+  const gray = grayscale(rgba, width, height);
+  const result = scan.vo.process({ gray, depth, width, height, intrinsics, orientation });
   const { points, colors } = cloudFromDepth(depth, rgba, width, height, intrinsics, result.scale);
   if (points.length < 360) {
     send(scan, 'skipped', { replay, message: 'Try a well-lit view with surfaces closer to the camera.' });
     return;
   }
-  const added = scan.slam.addScan(points, { orientation, pose: result.pose });
+  const view = { gray, depth, width, height, intrinsics, scale: result.scale };
+  const added = scan.slam.addScan(points, { orientation, pose: result.pose, view });
   if (!added.accepted) {
     send(scan, 'skipped', { replay, message: 'Skipped a frame with little movement.' });
     return;

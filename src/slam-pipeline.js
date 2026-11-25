@@ -3,6 +3,7 @@ import { mergeClouds, rejectStatisticalOutliers, transformCloud, voxelDownsample
 import { identity, optimizePoses } from './poses.js?v=6';
 import { angleOf } from './registration.js?v=6';
 import { cosineSimilarity, scanContext } from './scan-context.js?v=6';
+import { describeView, matchViews } from './visual-odometry.js?v=2';
 
 const odometrySigmas = [0.3, 0.3, 0.3, 0.15, 0.15, 0.15];
 const loopNoise = {
@@ -41,6 +42,8 @@ export class SlamPipeline {
     this.lastOrientation = null;
     this.lostFrames = 0;
     this.gyroTracking = false;
+    let seed = 3;
+    this.random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   }
 
   // `orientation` is an optional camera-to-world rotation from the device's motion
@@ -52,7 +55,11 @@ export class SlamPipeline {
   // `pose` is an optional camera-to-world pose from visual odometry, which also
   // fixes the scan's depth scale. The odometry motion since the last accepted
   // scan seeds registration, and ICP only refines it.
-  addScan(points, { orientation, pose } = {}) {
+  //
+  // `view` is an optional { gray, depth, width, height, intrinsics, scale } image
+  // of the scan. Each submap keeps a description of its first view, and loop
+  // closures are then measured by matching images rather than with ICP.
+  addScan(points, { orientation, pose, view } = {}) {
     if (!points.length) throw new Error('The scan has no depth samples.');
     const gtsam = this.gtsam;
     const size = this.voxelSize;
@@ -113,6 +120,7 @@ export class SlamPipeline {
     this.lastPose = pose;
     this.lastTransform = metrics.transform;
     this.frames.push({ registered: metrics.transform });
+    if (!this.pending.length) this.pendingView = view;
     this.pending.push(transformCloud(points, metrics.transform));
     this.pendingPoints += points.length / 3;
     const loopsBefore = this.loops.length;
@@ -137,7 +145,9 @@ export class SlamPipeline {
       before: pose,
       points: transformCloud(filtered, gtsam.pose3Inverse(pose)),
       descriptor: scanContext(filtered),
+      view: this.pendingView && describeView(this.pendingView),
     };
+    this.pendingView = null;
     if (index) {
       const previous = this.keyframes[index - 1];
       const relative = gtsam.pose3Between(previous.pose, pose);
@@ -173,6 +183,10 @@ export class SlamPipeline {
       const turn = this.gyroTracking ? angleOf(gtsam.pose3Between(current.pose, previous.pose)) : Infinity;
       if (similarity > this.similarityThreshold || turn < 0.6) candidates.push({ from, previous, similarity, turn });
     }
+    if (current.view) {
+      this.matchLoopViews(index, candidates);
+      return;
+    }
     candidates.sort((a, b) => this.gyroTracking ? a.turn - b.turn : b.similarity - a.similarity);
     for (const { from, previous, similarity } of candidates.slice(0, 4)) {
       // Without the gyro, keep the multiplication order of the seed in pose_graph.py.
@@ -193,6 +207,26 @@ export class SlamPipeline {
         transform: gtsam.pose3Inverse(match.transform), noise: loopNoise,
         fromFrame: previous.start, toFrame: current.start, detectedAt: this.frames.length,
         similarity, fitness: match.fitness, rmse: match.rmse,
+      });
+    }
+  }
+
+  // Verifies loop candidates by matching the first image of each submap. The
+  // submap's pose is that image's camera pose, so the image match is the loop
+  // transform itself.
+  matchLoopViews(index, candidates) {
+    const current = this.keyframes[index];
+    const gtsam = this.gtsam;
+    candidates.sort((a, b) => a.turn - b.turn);
+    for (const { from, previous, similarity } of candidates.slice(0, 4)) {
+      if (!previous.view) continue;
+      const match = matchViews(previous.view, current.view, this.random);
+      if (!match) continue;
+      this.loops.push({
+        from, to: index,
+        transform: gtsam.pose3Inverse(match.pose), noise: loopNoise,
+        fromFrame: previous.start, toFrame: current.start, detectedAt: this.frames.length,
+        similarity, fitness: match.inliers / match.matches, rmse: 0, features: match.inliers,
       });
     }
   }
@@ -227,6 +261,6 @@ export class SlamPipeline {
     const last = this.loops.at(-1);
     // Report the strongest geometric match from the latest solve.
     return this.loops.reduce((best, loop) =>
-      loop.detectedAt === last.detectedAt && loop.fitness > best.fitness ? loop : best, last);
+      loop.detectedAt === last.detectedAt && (loop.features ?? loop.fitness) > (best.features ?? best.fitness) ? loop : best, last);
   }
 }

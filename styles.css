@@ -247,7 +247,7 @@ h1 { font-size: clamp(3rem, 5.6vw, 6.1rem); margin-top: 15px; }
 #camera-preview {
   position: absolute;
   top: 51px;
-  right: 12px;
+  left: 12px;
   width: clamp(78px, 22%, 155px);
   aspect-ratio: 4 / 3;
   object-fit: cover;
@@ -265,6 +265,7 @@ h1 { font-size: clamp(3rem, 5.6vw, 6.1rem); margin-top: 15px; }
   font-size: 0.91rem;
 }
 .map-notes p { max-width: 90ch; }
+.map-notes p + p { margin-top: 10px; }
 .map-notes b { color: var(--ink); }
 .work { padding-block: clamp(55px, 8vw, 106px) clamp(42px, 5vw, 68px); }
 .section-heading { display: flex; align-items: center; gap: 24px; margin-bottom: clamp(25px, 4vw, 45px); }
@@ -364,7 +365,18 @@ footer { border-top: 1px solid var(--line); background: #101520; }
   .loop-comparison { flex-wrap: wrap; padding-block: 6px; }
   .loop-comparison .mode-switch button { padding-inline: 6px; }
   .loop-metrics { text-align: left; }
-  #loop-evidence { font-size: 0.68rem; }
+  #loop-evidence { font-size: 0.68rem; white-space: normal; }
+  /* Camera mode maps portrait video: give the map more height, and fit the prompt. */
+  #map-demo[data-mode="camera"] .viewport { height: clamp(360px, 112vw, 470px); }
+  .map-message { inset: 46px 10px 12px; padding: 10px; gap: 6px; }
+  .map-message strong { font-size: 1.05rem; }
+  .map-message p { font-size: 0.82rem; }
+  .map-message .approximation { font-size: 0.72rem; }
+  .viewport:has(.map-message:not([hidden])) .map-overlay-bottom { display: none; }
+  .camera-controls { gap: 8px; }
+  .camera-controls .light-button { flex: 1 1 40%; white-space: nowrap; }
+  #camera-frame-count { flex: 1 1 auto; text-align: right; white-space: normal; }
+  .camera-feedback { padding-inline: 10px; }
 }
 @media (pointer: coarse) { .map-hint { font-size: 0; } .map-hint::after { content: "Drag to orbit · Pinch to zoom"; font-size: 0.7rem; } }
 @media (max-width: 350px) { .wrap { width: calc(100% - 24px); } .header-inner nav { gap: 10px; } }

@@ -1,5 +1,5 @@
 import { MapViewer } from './viewer.js?v=6';
-import { createCameraRecorder } from './camera.js?v=15';
+import { createCameraRecorder } from './camera.js?v=16';
 import { drawLoopOverview } from './loop-overview.js?v=7';
 
 const byId = (id) => document.getElementById(id);
@@ -155,7 +155,7 @@ function startReplayWorker() {
   replayError = '';
   frame.disabled = play.disabled = true;
   byId('frame-count').value = '—';
-  const worker = new Worker(new URL('./replay-worker.js?v=8', import.meta.url), { type: 'module' });
+  const worker = new Worker(new URL('./replay-worker.js?v=9', import.meta.url), { type: 'module' });
   replayWorker = worker;
   worker.onmessage = ({ data }) => {
     if (replayWorker !== worker) return;
@@ -229,6 +229,7 @@ function changeMode(next) {
   if (mode === 'camera') camera.close();
   mode = next;
   for (const button of modes) button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+  byId('map-demo').dataset.mode = mode;
   byId('replay-controls').hidden = mode !== 'replay';
   byId('camera-controls').hidden = mode !== 'camera';
   byId('loop-comparison').hidden = byId('loop-overview').hidden = true;
@@ -236,7 +237,7 @@ function changeMode(next) {
   if (mode === 'camera') {
     stopReplayWorker();
     if (!recording?.complete) recording = undefined;
-    byId('demo-description').textContent = 'Camera RGB-D · ICP · Scan Context · GTSAM';
+    byId('demo-description').textContent = 'Estimated depth · Visual odometry · GTSAM';
     camera.open();
   } else {
     byId('demo-description').textContent = replayDescription;

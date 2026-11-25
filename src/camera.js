@@ -1,5 +1,5 @@
 import { depthInputSize } from './depth.js?v=11';
-import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=11';
+import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=12';
 import { drawLoopOverview } from './loop-overview.js?v=7';
 
 const workerTimeout = 60_000;
@@ -117,8 +117,9 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
   }
 
   // Gyro tracking also proposes loops by heading, which can score low on Scan Context.
-  function loopEvidence({ similarity, fitness }) {
+  function loopEvidence({ similarity, fitness, features }) {
     const source = similarity > 0.9 ? 'Scan Context ' + similarity.toFixed(3) : 'Heading match';
+    if (features) return source + ' · ' + features + ' matched image features';
     return source + ' · ICP ' + Math.round(fitness * 100) + '%';
   }
 

@@ -467,3 +467,135 @@ export class VisualOdometry {
     return (low + high) / 2;
   }
 }
+
+// Loop closure from image features.
+//
+// Two submaps from the same view, minutes apart, are each a cloud of estimated
+// depth whose scale and shape errors differ, so aligning the clouds with ICP
+// settles wherever their errors balance, often tens of centimetres from the
+// true pose. Matching the images instead gives the relative pose from the same
+// kind of reprojection fit visual odometry uses, which is far more precise.
+// Corners are described with BRIEF (binary intensity tests around a corner,
+// compared by Hamming distance). The phone stays upright and the views of a
+// loop are taken from similar distances, so no rotation or scale invariance
+// is needed.
+
+const patchRadius = 15;
+const pattern = (() => {
+  // A fixed set of 256 point pairs, normally distributed around the corner.
+  let seed = 7;
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const gaussian = () => Math.sqrt(-2 * Math.log(random() + 1e-12)) * Math.cos(2 * Math.PI * random());
+  const clamp = (value) => Math.max(-patchRadius, Math.min(patchRadius, Math.round(value * patchRadius / 2.5)));
+  return Int8Array.from(Array.from({ length: 1024 }, () => clamp(gaussian())));
+})();
+
+function boxBlur(gray, width, height) {
+  const horizontal = new Float32Array(gray.length), result = new Float32Array(gray.length);
+  for (let y = 0; y < height; y++) {
+    for (let x = 2; x < width - 2; x++) {
+      const i = y * width + x;
+      horizontal[i] = gray[i - 2] + gray[i - 1] + gray[i] + gray[i + 1] + gray[i + 2];
+    }
+  }
+  for (let y = 2; y < height - 2; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      result[i] = horizontal[i - 2 * width] + horizontal[i - width] + horizontal[i] + horizontal[i + width] + horizontal[i + 2 * width];
+    }
+  }
+  return result;
+}
+
+// Describes one frame for loop matching. `depth` is multiplied by `scale`;
+// intrinsics are normalized as estimateCloud returns them.
+export function describeView({ gray, depth, width, height, intrinsics, scale = 1 }) {
+  const camera = {
+    fx: intrinsics.fx * width, fy: intrinsics.fy * height,
+    cx: intrinsics.cx * width - 0.5, cy: intrinsics.cy * height - 0.5,
+  };
+  const smooth = boxBlur(gray, width, height);
+  const border = patchRadius + 3;
+  const corners = detect({ data: gray, width, height }, depth, [], 10)
+    .filter(([x, y]) => x >= border && y >= border && x < width - border && y < height - border);
+  const pixels = [], points = [];
+  const descriptors = new Uint32Array(corners.length * 8);
+  for (const [x, y] of corners) {
+    const z = depth[y * width + x] * scale;
+    const offset = pixels.length * 8;
+    for (let bit = 0; bit < 256; bit++) {
+      const a = (y + pattern[4 * bit + 1]) * width + x + pattern[4 * bit];
+      const b = (y + pattern[4 * bit + 3]) * width + x + pattern[4 * bit + 2];
+      if (smooth[a] < smooth[b]) descriptors[offset + (bit >> 5)] |= 1 << (bit & 31);
+    }
+    pixels.push([x, y]);
+    points.push([(x - camera.cx) * z / camera.fx, (y - camera.cy) * z / camera.fy, z]);
+  }
+  return { pixels, points, descriptors: descriptors.slice(0, pixels.length * 8), camera };
+}
+
+function popcount(value) {
+  value -= (value >>> 1) & 0x55555555;
+  value = (value & 0x33333333) + ((value >>> 2) & 0x33333333);
+  return (((value + (value >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
+}
+
+function nearest(from, i, to) {
+  let best = 257, second = 257, at = -1;
+  for (let j = 0; j < to.length / 8; j++) {
+    let distance = 0;
+    for (let k = 0; k < 8; k++) distance += popcount(from[8 * i + k] ^ to[8 * j + k]);
+    if (distance < best) { second = best; best = distance; at = j; } else if (distance < second) second = distance;
+  }
+  return { at, best, second };
+}
+
+// Relative pose between two described views: the transform that maps points in
+// view a's camera frame into view b's, with the number of verified matches, or
+// null when the views do not match.
+export function matchViews(a, b, random = Math.random) {
+  const matches = [];
+  for (let i = 0; i < a.pixels.length; i++) {
+    const forward = nearest(a.descriptors, i, b.descriptors);
+    if (forward.best > 64 || forward.best > 0.8 * forward.second) continue;
+    if (nearest(b.descriptors, forward.at, a.descriptors).at !== i) continue;
+    matches.push([i, forward.at]);
+  }
+  if (matches.length < 20) return null;
+  const pa = matches.map(([i]) => a.points[i]), pb = matches.map(([, j]) => b.points[j]);
+  let best = null, bestInliers = [];
+  for (let iteration = 0; iteration < 300; iteration++) {
+    const pick = new Set();
+    while (pick.size < 3) pick.add(Math.floor(random() * matches.length));
+    const model = similarity(pa, pb, [...pick]);
+    if (!model || model.scale < 0.6 || model.scale > 1.6) continue;
+    const inliers = [];
+    for (let i = 0; i < matches.length; i++) {
+      const p = apply(model.matrix, pa[i]).map((v, k) => model.scale * v + model.translation[k]);
+      if (Math.hypot(p[0] - pb[i][0], p[1] - pb[i][1], p[2] - pb[i][2]) < 0.05 + 0.08 * pb[i][2]) inliers.push(i);
+    }
+    if (inliers.length > bestInliers.length) {
+      best = model;
+      bestInliers = inliers;
+    }
+  }
+  if (!best || bestInliers.length < 20) return null;
+  // The pose comes from reprojecting view a's points into view b's image, so
+  // view b's depth errors do not enter it.
+  const fitted = similarity(pa, pb, bestInliers) ?? best;
+  let pose = { rotation: fitted.rotation, translation: fitted.translation };
+  const X = bestInliers.map((i) => pa[i]);
+  const observed = bestInliers.map((i) => b.pixels[matches[i][1]]);
+  pose = refinePose(X, observed, b.camera, pose, false);
+  const matrix = rotationMatrix(pose.rotation);
+  let inliers = 0;
+  for (let k = 0; k < X.length; k++) {
+    const p = apply(matrix, X[k]).map((v, axis) => v + pose.translation[axis]);
+    if (p[2] < 0.05) continue;
+    const ex = b.camera.fx * p[0] / p[2] + b.camera.cx - observed[k][0];
+    const ey = b.camera.fy * p[1] / p[2] + b.camera.cy - observed[k][1];
+    if (Math.hypot(ex, ey) < 4) inliers++;
+  }
+  if (inliers < 20 || inliers < 0.3 * matches.length) return null;
+  return { pose, inliers, matches: matches.length };
+}
