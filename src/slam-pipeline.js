@@ -144,9 +144,13 @@ export class SlamPipeline {
     for (let from = 0; index - from >= 5; from++) {
       const previous = this.keyframes[from];
       const similarity = cosineSimilarity(current.descriptor, previous.descriptor);
-      if (similarity > this.similarityThreshold) candidates.push({ from, previous, similarity });
+      // Scan Context, tuned for LiDAR range, separates inferred indoor submaps
+      // poorly. Gyro rotations drift little, so with them a keyframe that faced
+      // nearly the same way is also a candidate, and the overlap check decides.
+      const turn = this.gyroTracking ? angleOf(gtsam.pose3Between(current.pose, previous.pose)) : Infinity;
+      if (similarity > this.similarityThreshold || turn < 0.6) candidates.push({ from, previous, similarity, turn });
     }
-    candidates.sort((a, b) => b.similarity - a.similarity);
+    candidates.sort((a, b) => this.gyroTracking ? a.turn - b.turn : b.similarity - a.similarity);
     for (const { from, previous, similarity } of candidates.slice(0, 4)) {
       // Without the gyro, keep the multiplication order of the seed in pose_graph.py.
       // That order only approximates the relative pose while keyframe rotations stay

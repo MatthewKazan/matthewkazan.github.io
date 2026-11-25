@@ -1,5 +1,5 @@
 import { MapViewer } from './viewer.js?v=6';
-import { createCameraRecorder } from './camera.js?v=9';
+import { createCameraRecorder } from './camera.js?v=12';
 import { drawLoopOverview } from './loop-overview.js?v=6';
 
 const byId = (id) => document.getElementById(id);
@@ -155,7 +155,7 @@ function startReplayWorker() {
   replayError = '';
   frame.disabled = play.disabled = true;
   byId('frame-count').value = '—';
-  const worker = new Worker(new URL('./replay-worker.js?v=7', import.meta.url), { type: 'module' });
+  const worker = new Worker(new URL('./replay-worker.js?v=8', import.meta.url), { type: 'module' });
   replayWorker = worker;
   worker.onmessage = ({ data }) => {
     if (replayWorker !== worker) return;
@@ -267,8 +267,9 @@ try {
     if (recording.complete && replayIndex === recording.frames.length) finishReplay();
     else setPlaying(false);
   });
-  before.addEventListener('click', () => showCorrection(false));
-  after.addEventListener('click', () => showCorrection(true));
+  // In camera mode the recorder handles these buttons.
+  before.addEventListener('click', () => mode === 'replay' && showCorrection(false));
+  after.addEventListener('click', () => mode === 'replay' && showCorrection(true));
   byId('reset-view').addEventListener('click', () => viewer.reset());
   window.addEventListener('pagehide', () => {
     cancelClosureAnimation();

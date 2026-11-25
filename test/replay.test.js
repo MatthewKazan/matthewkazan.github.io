@@ -3,7 +3,7 @@ import test from 'node:test';
 import { initGtsam } from '../src/poses.js?v=6';
 import { rotationMatrix } from '../src/registration.js?v=6';
 import { replayLength, replayPointThreshold, roomScans } from '../src/replay.js?v=6';
-import { SlamPipeline } from '../src/slam-pipeline.js?v=8';
+import { SlamPipeline } from '../src/slam-pipeline.js?v=9';
 
 test('depth scans produce a verified loop when the camera revisits the room', async () => {
   const gtsam = await initGtsam();

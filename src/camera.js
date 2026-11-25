@@ -1,5 +1,6 @@
-import { depthInputSize } from './depth.js?v=8';
-import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=8';
+import { depthInputSize } from './depth.js?v=9';
+import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=9';
+import { drawLoopOverview } from './loop-overview.js?v=6';
 
 const workerTimeout = 60_000;
 
@@ -35,6 +36,12 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
   const rate = document.getElementById('recording-rate');
   const counter = document.getElementById('camera-frame-count');
   const feedback = document.getElementById('camera-feedback');
+  const comparison = document.getElementById('loop-comparison');
+  const overview = document.getElementById('loop-overview');
+  const before = document.getElementById('loop-before');
+  const after = document.getElementById('loop-after');
+  const evidence = document.getElementById('loop-evidence');
+  const shift = document.getElementById('loop-shift');
   const captureCanvas = document.createElement('canvas');
   const captureContext = captureCanvas.getContext('2d');
   const decodeCanvas = document.createElement('canvas');
@@ -48,6 +55,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
   let open = false;
   let cameraMessage = '';
   let orientation = null;
+  let corrected = true;
 
   function onOrientation(event) {
     if (event.alpha === null || event.beta === null || event.gamma === null) return;
@@ -103,11 +111,41 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     feedback.hidden = !message;
   }
 
+  // Gyro tracking also proposes loops by heading, which can score low on Scan Context.
+  function loopEvidence({ similarity, fitness }) {
+    const source = similarity > 0.9 ? 'Scan Context ' + similarity.toFixed(3) : 'Heading match';
+    return source + ' · ICP ' + Math.round(fitness * 100) + '%';
+  }
+
+  // Draws the mapped frames. Once a loop is verified, the same Before closure and
+  // After GTSAM switch as the replay compares odometry poses with optimized ones.
+  function showMap() {
+    if (!open) return;
+    const scan = recording;
+    const count = scan?.samples.length ?? 0;
+    const loop = scan?.loop && scan.initial?.length === count ? scan.loop : null;
+    comparison.hidden = overview.hidden = !loop;
+    if (!loop) {
+      describePoints(viewer.setVisible(count, scan?.poses ?? []));
+      return;
+    }
+    const amount = corrected ? 1 : 0;
+    describePoints(viewer.setVisible(count, scan.initial, { poses: scan.poses, amount }));
+    before.setAttribute('aria-pressed', String(!corrected));
+    after.setAttribute('aria-pressed', String(corrected));
+    drawLoopOverview(document.getElementById('loop-path'), scan.initial, scan.poses, loop, amount);
+    evidence.textContent = loopEvidence(loop);
+    evidence.title = 'Matched keyframes ' + (loop.from + 1) + ' and ' + (loop.to + 1);
+    const largest = scan.poses.reduce((most, { translation }, i) => Math.max(most,
+      Math.hypot(...translation.map((value, axis) => value - scan.initial[i].translation[axis]))), 0);
+    shift.textContent = 'Largest pose correction ' + Math.round(largest * 1000) + ' mm';
+  }
+
   function resetMap() {
     if (!open) return;
     viewer.clear(true);
     for (const sample of recording?.samples ?? []) viewer.addFrame(sample);
-    describePoints(viewer.setVisible(recording?.samples.length ?? 0, recording?.poses ?? []));
+    showMap();
   }
 
   function cancelTimer() {
@@ -143,7 +181,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
       return;
     }
     scan.restarted = true;
-    beginMapping(scan, { forceWasm: true, refresh });
+    beginMapping(scan, { forceWasm: true, singleThread: true, refresh });
   }
 
   function watchWorker(scan) {
@@ -294,15 +332,17 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
       if (data.type === 'frame') {
         scan.samples.push({ points: data.points, colors: data.colors });
         scan.poses = data.poses;
+        scan.initial = data.initial;
         if (data.loops > scan.loops) {
-          scan.loopSummary = 'Scan Context ' + data.match.similarity.toFixed(3) + ' · ICP ' +
-            Math.round(data.match.fitness * 100) + '% · GTSAM corrected the map.';
+          scan.loop = data.match;
+          corrected = true;
+          scan.loopSummary = loopEvidence(data.match) + ' · GTSAM corrected the map.';
         }
         scan.loops = data.loops;
         scan.feedback = scan.loopSummary;
         if (open) {
           viewer.addFrame(scan.samples.at(-1));
-          describePoints(viewer.setVisible(scan.samples.length, scan.poses));
+          showMap();
         }
       } else {
         scan.feedback = data.message;
@@ -339,6 +379,8 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     scan.feedback = 'Move slowly and keep some of the previous view in sight.';
     scan.samples = [];
     scan.poses = [];
+    scan.initial = [];
+    scan.loop = null;
     resetMap();
     if (!connectWorker(options)) {
       failMapping(scan, 'This browser could not start the depth worker.');
@@ -356,7 +398,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
       worker = null;
       recording.phase = 'draining';
       recording.restarted = true;
-      beginMapping(recording, { forceWasm: true, refresh: true });
+      beginMapping(recording, { forceWasm: true, singleThread: true, refresh: true });
       return;
     }
     if (recording && recording.phase !== 'complete') return;
@@ -413,6 +455,13 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
   }
 
   start.addEventListener('click', startRecording);
+  for (const [button, value] of [[before, false], [after, true]]) {
+    button?.addEventListener('click', () => {
+      if (!open || !recording?.loop) return;
+      corrected = value;
+      showMap();
+    });
+  }
   stop.addEventListener('click', () => {
     if (recording?.phase === 'failed') discardRecording();
     else stopCapture();

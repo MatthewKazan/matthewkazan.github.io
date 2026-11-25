@@ -82,23 +82,33 @@ export async function downloadDepthModel(progress, refresh = false) {
   return bytes;
 }
 
-export async function loadDepthModel(weights, progress, forceWasm) {
+// Cross-origin isolation (see coi-sw.js) allows multi-threaded WebAssembly, which
+// is about 3.5 times faster than one thread on a 4-core CPU.
+export function inferenceThreads(singleThread = false) {
+  if (singleThread || !globalThis.crossOriginIsolated) return 1;
+  return Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1));
+}
+
+export async function loadDepthModel(weights, progress, forceWasm, singleThread = false) {
   progress('Reading depth model weights…');
   const bytes = new Uint8Array(weights instanceof Response ? await weights.arrayBuffer() : weights);
   if (bytes.byteLength !== modelSize) throw new Error('The saved depth model is incomplete.');
   const providers = !forceWasm && navigator.gpu ? ['webgpu', 'wasm'] : ['wasm'];
+  const threads = inferenceThreads(singleThread);
   let cause;
   for (const provider of providers) {
     try {
-      progress(provider === 'wasm' ? 'Preparing CPU depth model…' : 'Preparing GPU depth model…');
+      progress(provider === 'wasm'
+        ? 'Preparing CPU depth model' + (threads > 1 ? ' on ' + threads + ' threads…' : '…')
+        : 'Preparing GPU depth model…');
       const ort = await import(ortUrl + (provider === 'wasm' ? 'ort.wasm.min.mjs' : 'ort.webgpu.min.mjs'));
       ort.env.wasm.wasmPaths = ortUrl;
-      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.numThreads = threads;
       const session = await ort.InferenceSession.create(bytes, {
         executionProviders: [provider],
         graphOptimizationLevel: 'all',
       });
-      progress('Depth model ready');
+      progress('Depth model ready' + (provider === 'wasm' ? ' · CPU · ' + threads + (threads > 1 ? ' threads' : ' thread') : ' · GPU'));
       return { session, ort, provider };
     } catch (error) {
       cause = error;

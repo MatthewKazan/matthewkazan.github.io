@@ -1,7 +1,7 @@
-import { downloadDepthModel, estimateCloud, loadDepthModel, removeCachedDepthModel } from './depth.js?v=8';
+import { downloadDepthModel, estimateCloud, loadDepthModel, removeCachedDepthModel } from './depth.js?v=9';
 import { initGtsam } from './poses.js?v=6';
 import { viewingPoints, viewingPose } from './sensor-frame.js?v=6';
-import { SlamPipeline } from './slam-pipeline.js?v=8';
+import { SlamPipeline } from './slam-pipeline.js?v=9';
 
 let download;
 let preparation;
@@ -9,6 +9,7 @@ let activeScan;
 let processing = Promise.resolve();
 let forceWasm = false;
 let refresh = false;
+let singleThread = false;
 
 function modelStatus(message) {
   self.postMessage({ type: 'model-status', message });
@@ -29,7 +30,7 @@ function prepare() {
       download = null;
       let depth;
       try {
-        depth = await loadDepthModel(weights, modelStatus, forceWasm);
+        depth = await loadDepthModel(weights, modelStatus, forceWasm, singleThread);
       } catch (error) {
         await removeCachedDepthModel();
         throw error;
@@ -72,8 +73,10 @@ async function processFrame(scan, { width, height, rgba, orientation }) {
   scan.calibration.set(size, intrinsics);
   const positions = viewingPoints(points);
   const poses = scan.slam.poses(true).map(viewingPose);
+  // Odometry-only poses, for comparing the map before and after loop closure.
+  const initial = scan.slam.loops.length ? scan.slam.poses(false).map(viewingPose) : poses;
   send(scan, 'frame', {
-    points: positions, colors, poses, loops: scan.slam.loops.length,
+    points: positions, colors, poses, initial, loops: scan.slam.loops.length,
     match: result.loops ? scan.slam.latestLoop() : undefined,
   }, [positions.buffer, colors.buffer]);
 }
@@ -82,6 +85,7 @@ self.onmessage = ({ data }) => {
   if (data.type === 'preload') {
     forceWasm = data.forceWasm;
     refresh = data.refresh;
+    singleThread = data.singleThread;
     if (!preparation) preload().catch(() => {});
   } else if (data.type === 'start') {
     const scan = { id: data.id, calibration: new Map() };

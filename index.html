@@ -7,10 +7,30 @@
   <meta name="description" content="Matthew Kazan’s engineering portfolio. Explore an interactive SLAM map, learned visual pose estimation, warehouse robotics, and hardware automation.">
   <title>Matthew Kazan · Robotics &amp; Perception</title>
   <link rel="preconnect" href="https://huggingface.co" crossorigin>
-  <script type="module" src="./src/preload-depth.js?v=8" async></script>
+  <script>
+    // Install the isolation service worker, then reload once so the page runs
+    // under it and depth inference can use several threads.
+    if (!window.crossOriginIsolated && window.isSecureContext && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./coi-sw.js').then(() => {
+        let reloaded = false;
+        try { reloaded = sessionStorage.getItem('coi-reload') === '1'; } catch {}
+        if (navigator.serviceWorker.controller && !reloaded) {
+          try { sessionStorage.setItem('coi-reload', '1'); } catch {}
+          location.reload();
+        } else if (!navigator.serviceWorker.controller) {
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (reloaded) return;
+            try { sessionStorage.setItem('coi-reload', '1'); } catch {}
+            location.reload();
+          }, { once: true });
+        }
+      }, () => {});
+    }
+  </script>
+  <script type="module" src="./src/preload-depth.js?v=9" async></script>
   <link rel="icon" href="./assets/mk.png" type="image/png">
   <link rel="stylesheet" href="./styles.css?v=6">
-  <script type="module" src="./src/app.js?v=8"></script>
+  <script type="module" src="./src/app.js?v=11"></script>
 </head>
 <body>
   <a href="#main" class="skip">Skip to content</a>
