@@ -7,10 +7,10 @@
   <meta name="description" content="Matthew Kazan’s engineering portfolio. Explore an interactive SLAM map, learned visual pose estimation, warehouse robotics, and hardware automation.">
   <title>Matthew Kazan · Robotics &amp; Perception</title>
   <link rel="preconnect" href="https://huggingface.co" crossorigin>
-  <script type="module" src="./src/preload-depth.js?v=6" async></script>
+  <script type="module" src="./src/preload-depth.js?v=7" async></script>
   <link rel="icon" href="./assets/mk.png" type="image/png">
   <link rel="stylesheet" href="./styles.css?v=6">
-  <script type="module" src="./src/app.js?v=6"></script>
+  <script type="module" src="./src/app.js?v=7"></script>
 </head>
 <body>
   <a href="#main" class="skip">Skip to content</a>
@@ -65,7 +65,7 @@
           <video id="camera-preview" autoplay playsinline muted hidden aria-label="Local camera preview"></video>
           <div id="camera-prompt" class="map-message" hidden>
             <strong>Map with your camera</strong>
-            <p>Start recording and move slowly. MoGe‑2 estimates depth from overlapping frames on your device.</p>
+            <p>Move slowly so the views overlap. The map keeps building from queued frames after you stop recording.</p>
             <small id="depth-status">Downloading depth model…</small>
           </div>
           <div id="map-fallback" class="map-message" hidden>
@@ -95,15 +95,15 @@
           <button type="button" class="light-button" id="record-camera">Start recording</button>
           <button type="button" class="light-button" id="stop-camera" hidden>Stop recording</button>
           <label class="rate-control" for="recording-rate"><span>Rate</span>
-            <select id="recording-rate" title="The recording can slow down to keep up with depth processing">
-              <option value="auto">Auto</option>
+            <select id="recording-rate" title="How often to capture a frame">
+              <option value="auto">Auto (4 fps)</option>
               <option value="0.5">0.5 fps</option>
               <option value="1">1 fps</option>
               <option value="2">2 fps</option>
               <option value="4">4 fps</option>
             </select>
           </label>
-          <span id="camera-frame-count">0 frames</span>
+          <span id="camera-frame-count">0 captured · 0 queued · 0 mapped</span>
         </div>
         <div class="demo-footer">
           <span id="demo-description">Simulated RGB-D · ICP · Scan Context · GTSAM</span>

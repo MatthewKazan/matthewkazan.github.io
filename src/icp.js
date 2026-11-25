@@ -142,9 +142,9 @@ export function runIcp(gtsam, source, target, seed, distance, iterations, normal
   return { transform, fitness: metrics.fitness, rmse: metrics.rmse };
 }
 
-export function verifyLoop(gtsam, source, target, seed, size = 0.02) {
+export function runMultiscaleIcp(gtsam, source, target, seed, size, fineIterations) {
   const coarse = runIcp(gtsam, voxelDownsample(source, size * 5), voxelDownsample(target, size * 5),
     seed, size * 20, 50, size * 10);
   return runIcp(gtsam, voxelDownsample(source, size), voxelDownsample(target, size),
-    coarse.transform, size * 2.5, 1000, size * 2);
+    coarse.transform, size * 2.5, fineIterations, size * 2);
 }

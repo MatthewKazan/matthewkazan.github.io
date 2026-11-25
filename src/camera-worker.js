@@ -1,7 +1,7 @@
 import { downloadDepthModel, estimateCloud, loadDepthModel } from './depth.js?v=6';
 import { initGtsam } from './poses.js?v=6';
 import { viewingPoints, viewingPose } from './sensor-frame.js?v=6';
-import { SlamPipeline } from './slam-pipeline.js?v=6';
+import { SlamPipeline } from './slam-pipeline.js?v=7';
 
 let download;
 let preparation;
@@ -54,9 +54,9 @@ async function processFrame(scan, { width, height, rgba }) {
   const result = scan.slam.addScan(points);
   if (!result.accepted) {
     const message = result.reason === 'lost'
-      ? 'Tracking lost. Turn back toward the last mapped view and move slowly.'
-      : 'Hold a little overlap as you move to a new view.';
-    send(scan, 'skipped', { message, tracking: result.reason });
+      ? 'ICP skipped a frame with too little overlap or an implausible pose.'
+      : 'ICP skipped a frame with little movement.';
+    send(scan, 'skipped', { message });
     return;
   }
   scan.calibration.set(size, intrinsics);

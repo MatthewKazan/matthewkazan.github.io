@@ -1,4 +1,4 @@
-import { runIcp, verifyLoop } from './icp.js?v=6';
+import { runIcp, runMultiscaleIcp } from './icp.js?v=7';
 import { mergeClouds, rejectStatisticalOutliers, transformCloud, voxelDownsample } from './point-cloud.js?v=6';
 import { identity, optimizePoses } from './poses.js?v=6';
 import { angleOf } from './registration.js?v=6';
@@ -26,20 +26,6 @@ export class SlamPipeline {
     this.pendingPoints = 0;
     this.window = [];
     this.lastTransform = identity;
-    this.motion = identity;
-  }
-
-  trackCamera(source, world) {
-    const gtsam = this.gtsam;
-    const predicted = gtsam.pose3Compose(this.lastTransform, this.motion);
-    // Estimated RGB depth has wider frame-to-frame error than sensor depth.
-    const coarse = runIcp(gtsam, voxelDownsample(source, 0.08), voxelDownsample(world, 0.08),
-      predicted, 0.32, 35, 0.16);
-    const coarseMotion = gtsam.pose3Between(this.lastTransform, coarse.transform);
-    const plausibleSeed = coarse.fitness > 0.45 && angleOf(coarseMotion) < 0.55
-      && Math.hypot(...coarseMotion.translation) < 0.65;
-    return runIcp(gtsam, source, voxelDownsample(world, this.voxelSize),
-      plausibleSeed ? coarse.transform : predicted, 0.12, 75);
   }
 
   addScan(points) {
@@ -51,21 +37,18 @@ export class SlamPipeline {
       const source = voxelDownsample(points, size);
       const world = mergeClouds(this.window);
       metrics = this.cameraTracking
-        ? this.trackCamera(source, world)
+        ? runMultiscaleIcp(this.gtsam, points, world, this.lastTransform, size, 100)
         : runIcp(this.gtsam, source, voxelDownsample(world, size), this.lastTransform, size * 2.5, 500);
       if (this.cameraTracking) {
         const relative = this.gtsam.pose3Between(this.lastTransform, metrics.transform);
         const distance = Math.hypot(...relative.translation);
         const turn = angleOf(relative);
-        if (metrics.fitness < 0.50 || metrics.rmse > 0.085 || distance > 0.65 || turn > 0.57) {
-          this.motion = identity;
+        if (metrics.fitness < 0.50 || distance > 0.65 || turn > 0.57) {
           return { accepted: false, reason: 'lost', fitness: metrics.fitness };
         }
         if (distance < 0.020 && turn < 0.018) {
-          this.motion = identity;
           return { accepted: false, reason: 'still', fitness: metrics.fitness };
         }
-        this.motion = relative;
       }
       this.window.push(transformCloud(source, metrics.transform));
       if (this.window.length > 10) this.window.shift();
@@ -129,7 +112,7 @@ export class SlamPipeline {
     for (const { from, previous, similarity } of candidates.slice(0, 4)) {
       // This multiplication order matches the seed in pose_graph.py.
       const seed = gtsam.pose3Compose(previous.pose, gtsam.pose3Inverse(current.pose));
-      const match = verifyLoop(gtsam, previous.points, current.points, seed, this.voxelSize);
+      const match = runMultiscaleIcp(gtsam, previous.points, current.points, seed, this.voxelSize, 1000);
       if (match.fitness <= 0.4) continue;
       this.loops.push({
         from, to: index,

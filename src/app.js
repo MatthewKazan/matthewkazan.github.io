@@ -1,5 +1,5 @@
 import { MapViewer } from './viewer.js?v=6';
-import { createCameraRecorder } from './camera.js?v=6';
+import { createCameraRecorder } from './camera.js?v=7';
 import { drawLoopOverview } from './loop-overview.js?v=6';
 
 const byId = (id) => document.getElementById(id);
@@ -146,7 +146,7 @@ function loadReplay() {
 }
 
 function startReplayWorker() {
-  const worker = new Worker(new URL('./replay-worker.js?v=6', import.meta.url), { type: 'module' });
+  const worker = new Worker(new URL('./replay-worker.js?v=7', import.meta.url), { type: 'module' });
   worker.onmessage = ({ data }) => {
     if (data.type === 'start') {
       recording = {
@@ -249,7 +249,7 @@ try {
   window.addEventListener('pagehide', () => {
     cancelClosureAnimation();
     setPlaying(false);
-    if (mode === 'camera') camera.stop();
+    camera.stop();
   });
 } catch (error) {
   console.error(error);

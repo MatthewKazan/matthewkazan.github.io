@@ -3,7 +3,7 @@ import test from 'node:test';
 import { initGtsam } from '../src/poses.js?v=6';
 import { rotationMatrix } from '../src/registration.js?v=6';
 import { replayLength, replayPointThreshold, roomScans } from '../src/replay.js?v=6';
-import { SlamPipeline } from '../src/slam-pipeline.js?v=6';
+import { SlamPipeline } from '../src/slam-pipeline.js?v=7';
 
 test('depth scans produce a verified loop when the camera revisits the room', async () => {
   const gtsam = await initGtsam();
@@ -42,7 +42,13 @@ test('depth scans produce a verified loop when the camera revisits the room', as
 test('camera tracking follows the turn and verifies a loop', async () => {
   const gtsam = await initGtsam();
   const slam = new SlamPipeline(gtsam, { pointThreshold: 10_000, cameraTracking: true });
-  for (const { points } of roomScans()) slam.addScan(points);
+  const scans = roomScans();
+  const first = scans.next().value.points;
+  slam.addScan(first);
+  const unrelated = first.map((coordinate, i) => coordinate + (i % 3 === 2 ? 10 : 0));
+  assert.equal(slam.addScan(unrelated).reason, 'lost');
+  assert.equal(slam.frames.length, 1);
+  for (const { points } of scans) slam.addScan(points);
   assert.ok(slam.frames.length >= replayLength * 0.9);
   assert.ok(slam.loops.some(({ fitness }) => fitness > 0.4));
 });
