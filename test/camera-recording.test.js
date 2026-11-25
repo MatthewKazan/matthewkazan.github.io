@@ -82,7 +82,7 @@ async function cameraFixture(t) {
     });
   }
 
-  const { createCameraRecorder } = await import('../src/camera.js?v=8');
+  const { createCameraRecorder } = await import('../src/camera.js?v=9');
   const setState = t.mock.fn();
   const recorder = createCameraRecorder({
     viewer: { clear() {}, addFrame() {}, setVisible() { return 0; } },
@@ -188,4 +188,29 @@ test('a silent worker is replaced and retry can reload the model without droppin
   assert.deepEqual(sent, [10, 10, 10, 20]);
   assert.equal(counter.textContent, '2 captured · 0 queued · 0 mapped');
   recorder.stop();
+});
+
+test('device orientation maps to the rear camera frame used by the scans', async () => {
+  const { cameraOrientation } = await import('../src/camera.js?v=9');
+  const { rotationMatrix } = await import('../src/registration.js?v=6');
+  const axes = (event, angle) => {
+    const m = rotationMatrix(cameraOrientation(event, angle));
+    return { right: [m[0], m[3], m[6]], down: [m[1], m[4], m[7]], forward: [m[2], m[5], m[8]] };
+  };
+  const near = (actual, expected) => actual.forEach((value, i) => assert.ok(Math.abs(value - expected[i]) < 1e-9));
+  // Upright in portrait and facing north (world x east, y north, z up).
+  let camera = axes({ alpha: 0, beta: 90, gamma: 0 });
+  near(camera.forward, [0, 1, 0]);
+  near(camera.right, [1, 0, 0]);
+  near(camera.down, [0, 0, -1]);
+  // Turning right lowers alpha and swings the lens toward the east.
+  camera = axes({ alpha: -30, beta: 90, gamma: 0 });
+  near(camera.forward, [0.5, Math.sqrt(3) / 2, 0]);
+  // Flat on a table with the screen up, the lens faces the floor.
+  camera = axes({ alpha: 0, beta: 0, gamma: 0 });
+  near(camera.forward, [0, 0, -1]);
+  near(camera.down, [0, -1, 0]);
+  // With the screen turned 90 degrees, the image's right edge is the device's bottom.
+  camera = axes({ alpha: 0, beta: 0, gamma: 0 }, 90);
+  near(camera.right, [0, -1, 0]);
 });

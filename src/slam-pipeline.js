@@ -1,4 +1,4 @@
-import { runIcp, runMultiscaleIcp } from './icp.js?v=7';
+import { runIcp, runMultiscaleIcp, searchTranslation } from './icp.js?v=8';
 import { mergeClouds, rejectStatisticalOutliers, transformCloud, voxelDownsample } from './point-cloud.js?v=6';
 import { identity, optimizePoses } from './poses.js?v=6';
 import { angleOf } from './registration.js?v=6';
@@ -10,6 +10,17 @@ const loopNoise = {
   robust: { type: 'huber', k: 1.345 },
 };
 const priorNoise = { sigmas: [0, 0, 0, 0, 0, 0] };
+
+// Rotation of camera b in camera a's frame, from two camera-to-world quaternions.
+function relativeRotation(a, b) {
+  const w = a.w, x = -a.x, y = -a.y, z = -a.z;
+  return {
+    w: w * b.w - x * b.x - y * b.y - z * b.z,
+    x: w * b.x + x * b.w + y * b.z - z * b.y,
+    y: w * b.y - x * b.z + y * b.w + z * b.x,
+    z: w * b.z + x * b.y - y * b.x + z * b.w,
+  };
+}
 
 export class SlamPipeline {
   constructor(gtsam, { pointThreshold = 75_000, similarityThreshold = 0.90, cameraTracking = false } = {}) {
@@ -26,33 +37,57 @@ export class SlamPipeline {
     this.pendingPoints = 0;
     this.window = [];
     this.lastTransform = identity;
+    this.lastOrientation = null;
+    this.lostFrames = 0;
+    this.gyroTracking = false;
   }
 
-  addScan(points) {
+  // `orientation` is an optional camera-to-world rotation from the device's motion
+  // sensors. Monocular depth is not consistent enough between frames for ICP to
+  // recover rotation (it trades turns for translation), which LiDAR depth was in
+  // the original app. When motion sensors are available, the gyro rotation since
+  // the last accepted scan sets the rotation and ICP fits only the translation.
+  addScan(points, { orientation } = {}) {
     if (!points.length) throw new Error('The scan has no depth samples.');
+    const gtsam = this.gtsam;
     const size = this.voxelSize;
     let metrics = { transform: identity, fitness: 1, rmse: 0 };
     if (!this.window.length) this.window.push(points);
     else {
       const source = voxelDownsample(points, size);
       const world = mergeClouds(this.window);
-      metrics = this.cameraTracking
-        ? runMultiscaleIcp(this.gtsam, points, world, this.lastTransform, size, 100)
-        : runIcp(this.gtsam, source, voxelDownsample(world, size), this.lastTransform, size * 2.5, 500);
+      let seed = this.lastTransform;
+      const rotated = !!(orientation && this.lastOrientation);
+      if (rotated) {
+        const turn = { rotation: relativeRotation(this.lastOrientation, orientation), translation: [0, 0, 0] };
+        seed = gtsam.pose3Compose(this.lastTransform, turn);
+        this.gyroTracking = true;
+        metrics = runIcp(gtsam, source, voxelDownsample(world, size), seed, size * 2.5, 500, 0, true);
+      } else if (this.cameraTracking) {
+        metrics = runMultiscaleIcp(gtsam, points, world, seed, size, 100);
+      } else {
+        metrics = runIcp(gtsam, source, voxelDownsample(world, size), seed, size * 2.5, 500);
+      }
       if (this.cameraTracking) {
-        const relative = this.gtsam.pose3Between(this.lastTransform, metrics.transform);
+        const relative = gtsam.pose3Between(this.lastTransform, metrics.transform);
         const distance = Math.hypot(...relative.translation);
         const turn = angleOf(relative);
-        if (metrics.fitness < 0.50 || distance > 0.65 || turn > 0.57) {
-          return { accepted: false, reason: 'lost', fitness: metrics.fitness };
-        }
-        if (distance < 0.020 && turn < 0.018) {
+        if (metrics.fitness < 0.50 || distance > 0.65 || (!rotated && turn > 0.57)) {
+          // After a second of lost frames, re-anchor at the gyro pose so tracking
+          // does not wait for the camera to return to the last accepted view.
+          if (!rotated || ++this.lostFrames < 4) {
+            return { accepted: false, reason: 'lost', fitness: metrics.fitness };
+          }
+          metrics = { ...metrics, transform: seed };
+        } else if (distance < 0.020 && turn < 0.018) {
           return { accepted: false, reason: 'still', fitness: metrics.fitness };
         }
       }
       this.window.push(transformCloud(source, metrics.transform));
       if (this.window.length > 10) this.window.shift();
     }
+    this.lostFrames = 0;
+    this.lastOrientation = orientation;
     this.lastTransform = metrics.transform;
     this.frames.push({ registered: metrics.transform });
     this.pending.push(transformCloud(points, metrics.transform));
@@ -93,10 +128,13 @@ export class SlamPipeline {
     }
     this.pending = [];
     this.pendingPoints = 0;
-    if (index > 0 && index % 2 === 0) {
-      this.detectLoops(index);
-      this.optimize();
-    }
+    if (!index) return;
+    // The native pipeline searches on every second keyframe. Inferred depth yields
+    // far fewer keyframes per turn, so gyro tracking searches on each one and
+    // solves as soon as a loop is verified.
+    const loops = this.loops.length;
+    if (this.gyroTracking || index % 2 === 0) this.detectLoops(index);
+    if (index % 2 === 0 || this.loops.length > loops) this.optimize();
   }
 
   detectLoops(index) {
@@ -110,10 +148,19 @@ export class SlamPipeline {
     }
     candidates.sort((a, b) => b.similarity - a.similarity);
     for (const { from, previous, similarity } of candidates.slice(0, 4)) {
-      // This multiplication order matches the seed in pose_graph.py.
-      const seed = gtsam.pose3Compose(previous.pose, gtsam.pose3Inverse(current.pose));
-      const match = runMultiscaleIcp(gtsam, previous.points, current.points, seed, this.voxelSize, 1000);
-      if (match.fitness <= 0.4) continue;
+      // Without the gyro, keep the multiplication order of the seed in pose_graph.py.
+      // That order only approximates the relative pose while keyframe rotations stay
+      // small, so gyro tracking, whose rotations are trusted through a full turn,
+      // uses the exact relative pose that maps the older submap into the current one.
+      const seed = this.gyroTracking
+        ? gtsam.pose3Between(current.pose, previous.pose)
+        : gtsam.pose3Compose(previous.pose, gtsam.pose3Inverse(current.pose));
+      // With gyro rotations, the loop keeps the seed rotation and searches for the
+      // drifted translation. Inferred depth also needs a stricter overlap.
+      const match = this.gyroTracking
+        ? searchTranslation(gtsam, previous.points, current.points, seed)
+        : runMultiscaleIcp(gtsam, previous.points, current.points, seed, this.voxelSize, 1000);
+      if (match.fitness <= (this.gyroTracking ? 0.5 : 0.4)) continue;
       this.loops.push({
         from, to: index,
         transform: gtsam.pose3Inverse(match.transform), noise: loopNoise,

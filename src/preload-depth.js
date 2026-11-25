@@ -15,7 +15,7 @@ export function getCameraWorker({ forceWasm = false, refresh = false } = {}) {
   try {
     const appleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const worker = new Worker(new URL('./camera-worker.js?v=8', import.meta.url), { type: 'module' });
+    const worker = new Worker(new URL('./camera-worker.js?v=9', import.meta.url), { type: 'module' });
     worker.addEventListener('message', ({ data }) => {
       if (cameraWorker === worker && data.type === 'model-status') modelStatus = data.message;
     });

@@ -2,7 +2,7 @@ import { fuseFrames } from './map-fusion.js?v=6';
 import { initGtsam } from './poses.js?v=6';
 import { replayHeight, replayLength, replayPointThreshold, replayWidth, roomScans } from './replay.js?v=6';
 import { viewingPoints, viewingPose } from './sensor-frame.js?v=6';
-import { SlamPipeline } from './slam-pipeline.js?v=7';
+import { SlamPipeline } from './slam-pipeline.js?v=8';
 
 try {
   const gtsam = await initGtsam();

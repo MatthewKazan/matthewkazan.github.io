@@ -1,7 +1,7 @@
 import { downloadDepthModel, estimateCloud, loadDepthModel, removeCachedDepthModel } from './depth.js?v=8';
 import { initGtsam } from './poses.js?v=6';
 import { viewingPoints, viewingPose } from './sensor-frame.js?v=6';
-import { SlamPipeline } from './slam-pipeline.js?v=7';
+import { SlamPipeline } from './slam-pipeline.js?v=8';
 
 let download;
 let preparation;
@@ -48,7 +48,7 @@ function send(scan, type, payload = {}, transfer = []) {
   if (scan === activeScan) self.postMessage({ type, id: scan.id, ...payload }, transfer);
 }
 
-async function processFrame(scan, { width, height, rgba }) {
+async function processFrame(scan, { width, height, rgba, orientation }) {
   const { depth } = await prepare();
   if (activeScan !== scan) return;
   const size = width + 'x' + height;
@@ -61,7 +61,7 @@ async function processFrame(scan, { width, height, rgba }) {
   }
 
   send(scan, 'frame-stage', { message: 'Aligning scan' });
-  const result = scan.slam.addScan(points);
+  const result = scan.slam.addScan(points, { orientation });
   if (!result.accepted) {
     const message = result.reason === 'lost'
       ? 'ICP skipped a frame with too little overlap or an implausible pose.'

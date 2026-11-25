@@ -3,7 +3,7 @@ import test from 'node:test';
 import { initGtsam } from '../src/poses.js?v=6';
 import { rotationMatrix } from '../src/registration.js?v=6';
 import { replayLength, replayPointThreshold, roomScans } from '../src/replay.js?v=6';
-import { SlamPipeline } from '../src/slam-pipeline.js?v=7';
+import { SlamPipeline } from '../src/slam-pipeline.js?v=8';
 
 test('depth scans produce a verified loop when the camera revisits the room', async () => {
   const gtsam = await initGtsam();
@@ -51,4 +51,20 @@ test('camera tracking follows the turn and verifies a loop', async () => {
   for (const { points } of scans) slam.addScan(points);
   assert.ok(slam.frames.length >= replayLength * 0.9);
   assert.ok(slam.loops.some(({ fitness }) => fitness > 0.4));
+});
+
+test('with gyro rotations, camera tracking keeps the turn and closes the loop', async () => {
+  const gtsam = await initGtsam();
+  const slam = new SlamPipeline(gtsam, { pointThreshold: 10_000, cameraTracking: true });
+  let index = 0;
+  for (const { points } of roomScans()) {
+    // Camera-to-world rotation of the simulated sensor, as the phone would report it.
+    const yaw = 0.37 + index++ / (replayLength - 1) * Math.PI * 2.16;
+    const orientation = { w: 0, x: Math.cos(yaw / 2), y: 0, z: -Math.sin(yaw / 2) };
+    slam.addScan(points, { orientation });
+  }
+  assert.ok(slam.gyroTracking);
+  assert.ok(slam.frames.length >= replayLength * 0.9);
+  assert.ok(slam.loops.length);
+  for (const loop of slam.loops) assert.ok(loop.fitness > 0.5);
 });

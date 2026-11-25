@@ -3,6 +3,29 @@ import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth
 
 const workerTimeout = 60_000;
 
+const degrees = Math.PI / 180;
+const multiply = (a, b) => ({
+  w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+  x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+  y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+  z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+});
+const about = (axis, angle) => {
+  const q = { w: Math.cos(angle / 2), x: 0, y: 0, z: 0 };
+  q[axis] = Math.sin(angle / 2);
+  return q;
+};
+
+// Camera-to-world rotation of the rear camera from a deviceorientation event.
+// The W3C device frame has x right, y toward the top of the screen and z out of
+// the screen, composed as Z(alpha) X(beta) Y(gamma). The scans use the camera
+// frame: x right in the image, y down and z forward through the rear lens. The
+// video is rotated with the screen, so the screen angle turns the image axes.
+export function cameraOrientation({ alpha, beta, gamma }, screenAngle = 0) {
+  const device = multiply(multiply(about('z', alpha * degrees), about('x', beta * degrees)), about('y', gamma * degrees));
+  return multiply(multiply(device, about('z', -screenAngle * degrees)), about('x', Math.PI));
+}
+
 export function createCameraRecorder({ viewer, setState, describePoints }) {
   const video = document.getElementById('camera-preview');
   const prompt = document.getElementById('camera-prompt');
@@ -24,6 +47,23 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
   let workerDeadline = null;
   let open = false;
   let cameraMessage = '';
+  let orientation = null;
+
+  function onOrientation(event) {
+    if (event.alpha === null || event.beta === null || event.gamma === null) return;
+    const angle = globalThis.screen?.orientation?.angle ?? globalThis.orientation ?? 0;
+    orientation = cameraOrientation(event, angle);
+  }
+
+  function listenForMotion() {
+    orientation = null;
+    globalThis.removeEventListener?.('deviceorientation', onOrientation);
+    // iOS asks for motion access, and only from the button press.
+    const request = globalThis.DeviceOrientationEvent?.requestPermission?.();
+    Promise.resolve(request).then((state) => {
+      if (!state || state === 'granted') globalThis.addEventListener?.('deviceorientation', onOrientation);
+    }, () => {});
+  }
 
   function renderControls() {
     if (!open) return;
@@ -77,6 +117,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
 
   function releaseCamera() {
     cancelTimer();
+    globalThis.removeEventListener?.('deviceorientation', onOrientation);
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
     video.srcObject = null;
@@ -138,6 +179,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
         releaseWorker(scan);
         scan.phase = 'complete';
         scan.images = [];
+        scan.orientations = [];
         cameraMessage = scan.captured ? scan.feedback : 'No camera frames were captured.';
         renderControls();
       }
@@ -160,7 +202,9 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
       }
       decodeContext.drawImage(image, 0, 0, width, height);
       const { data: rgba } = decodeContext.getImageData(0, 0, width, height);
-      worker.postMessage({ type: 'frame', id, width, height, rgba }, [rgba.buffer]);
+      worker.postMessage({
+        type: 'frame', id, width, height, rgba, orientation: scan.orientations[scan.processed],
+      }, [rgba.buffer]);
     } catch (error) {
       if (recording === scan && scan.id === id && scan.ready) {
         failMapping(scan, error.message || 'A queued frame could not be read.');
@@ -205,6 +249,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
           // Keep the sampled images in order, including while inference is busy.
           // JPEG keeps a long backlog small enough for the phone.
           scan.images.push(image);
+          scan.orientations.push(orientation);
           scan.captured++;
           scan.videoTime = video.currentTime;
           scan.lastCapture = performance.now();
@@ -316,13 +361,14 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     }
     if (recording && recording.phase !== 'complete') return;
     const scan = {
-      previous: recording, phase: 'opening', images: [], captured: 0, processed: 0, samples: [],
+      previous: recording, phase: 'opening', images: [], orientations: [], captured: 0, processed: 0, samples: [],
       lastCapture: -Infinity, videoTime: -Infinity,
     };
     recording = scan;
     cameraMessage = '';
     renderControls();
     stop.focus();
+    listenForMotion();
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera access requires HTTPS and a supported browser.');
       const media = await navigator.mediaDevices.getUserMedia({
