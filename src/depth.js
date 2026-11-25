@@ -117,6 +117,29 @@ export async function loadDepthModel(weights, progress, forceWasm, singleThread 
   throw new Error('This browser could not initialize the depth model.', { cause });
 }
 
+// Back-projects every fourth pixel of a depth map (0 = no depth) through
+// normalized intrinsics, multiplying depth by `scale`.
+export function cloudFromDepth(depth, rgba, width, height, { fx, fy, cx, cy }, scale = 1) {
+  const points = new Float32Array(Math.ceil(width / 4) * Math.ceil(height / 4) * 3);
+  const colors = new Uint8Array(points.length);
+  let offset = 0;
+  for (let row = 0; row < height; row += 4) {
+    for (let column = 0; column < width; column += 4) {
+      const i = row * width + column;
+      const z = depth[i] * scale;
+      if (!z) continue;
+      points[offset] = ((column + 0.5) / width - cx) * z / fx;
+      points[offset + 1] = ((row + 0.5) / height - cy) * z / fy;
+      points[offset + 2] = z;
+      colors[offset] = rgba[4 * i];
+      colors[offset + 1] = rgba[4 * i + 1];
+      colors[offset + 2] = rgba[4 * i + 2];
+      offset += 3;
+    }
+  }
+  return { points: points.slice(0, offset), colors: colors.slice(0, offset) };
+}
+
 export async function estimateCloud({ session, ort }, width, height, rgba, calibration) {
   const size = width * height;
   const rgb = new Float32Array(size * 3);
@@ -149,28 +172,15 @@ export async function estimateCloud({ session, ort }, width, height, rgba, calib
       height,
     });
     const mask = MogePost.cleanDepthMask(metric.depth, metric.mask, width, height, 0.075, true);
-    const { fx, fy, cx, cy } = calibration ?? metric.intrinsics;
-    const points = new Float32Array(size * 3);
-    const colors = new Uint8Array(size * 3);
-    let offset = 0;
-    for (let row = 0; row < height; row += 4) {
-      for (let column = 0; column < width; column += 4) {
-        const i = row * width + column;
-        const z = metric.depth[i];
-        if (!mask[i] || z < 0.16 || z > 12 || !Number.isFinite(z)) continue;
-        const x = ((column + 0.5) / width - cx) * z / fx;
-        const y = ((row + 0.5) / height - cy) * z / fy;
-        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-        points[offset] = x;
-        points[offset + 1] = y;
-        points[offset + 2] = z;
-        colors[offset] = rgba[4 * i];
-        colors[offset + 1] = rgba[4 * i + 1];
-        colors[offset + 2] = rgba[4 * i + 2];
-        offset += 3;
-      }
+    const intrinsics = calibration ?? metric.intrinsics;
+    // The full-resolution depth map (0 where masked) lets visual odometry read
+    // depth at tracked image features.
+    const depth = new Float32Array(size);
+    for (let i = 0; i < size; i++) {
+      const z = metric.depth[i];
+      if (mask[i] && z >= 0.16 && z <= 12 && Number.isFinite(z)) depth[i] = z;
     }
-    return { points: points.slice(0, offset), colors: colors.slice(0, offset), intrinsics: { fx, fy, cx, cy } };
+    return { ...cloudFromDepth(depth, rgba, width, height, intrinsics), intrinsics, depth };
   } finally {
     for (const tensor of Object.values(outputs)) tensor.dispose();
     for (const tensor of Object.values(feeds)) tensor.dispose();

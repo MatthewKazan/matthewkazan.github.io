@@ -23,7 +23,8 @@ function relativeRotation(a, b) {
 }
 
 export class SlamPipeline {
-  constructor(gtsam, { pointThreshold = 75_000, similarityThreshold = 0.90, cameraTracking = false } = {}) {
+  constructor(gtsam, { pointThreshold = 75_000, similarityThreshold = 0.90, cameraTracking = false, refine = 'icp' } = {}) {
+    this.refine = refine;
     this.gtsam = gtsam;
     this.voxelSize = 0.02;
     this.pointThreshold = pointThreshold;
@@ -47,7 +48,11 @@ export class SlamPipeline {
   // recover rotation (it trades turns for translation), which LiDAR depth was in
   // the original app. When motion sensors are available, the gyro rotation since
   // the last accepted scan sets the rotation and ICP fits only the translation.
-  addScan(points, { orientation } = {}) {
+  //
+  // `pose` is an optional camera-to-world pose from visual odometry, which also
+  // fixes the scan's depth scale. The odometry motion since the last accepted
+  // scan seeds registration, and ICP only refines it.
+  addScan(points, { orientation, pose } = {}) {
     if (!points.length) throw new Error('The scan has no depth samples.');
     const gtsam = this.gtsam;
     const size = this.voxelSize;
@@ -57,8 +62,23 @@ export class SlamPipeline {
       const source = voxelDownsample(points, size);
       const world = mergeClouds(this.window);
       let seed = this.lastTransform;
-      const rotated = !!(orientation && this.lastOrientation);
-      if (rotated) {
+      const tracked = !!(pose && this.lastPose);
+      const rotated = tracked || !!(orientation && this.lastOrientation);
+      if (tracked) {
+        seed = gtsam.pose3Compose(this.lastTransform, gtsam.pose3Between(this.lastPose, pose));
+        this.gyroTracking = true;
+        const refine = globalThis.EXP?.refine ?? this.refine;
+        if (refine === 'none') metrics = { transform: seed, fitness: 1, rmse: 0 };
+        else {
+          const target = voxelDownsample(world, size);
+          metrics = runIcp(gtsam, source, target, seed, size * 2.5, 30, 0, refine === 'translation');
+          // Keep the odometry pose when ICP finds little overlap or pulls far from it.
+          const pulled = gtsam.pose3Between(seed, metrics.transform);
+          if (metrics.fitness < 0.3 || Math.hypot(...pulled.translation) > 0.1 || angleOf(pulled) > 0.05) {
+            metrics = { ...metrics, transform: seed };
+          }
+        }
+      } else if (rotated) {
         const turn = { rotation: relativeRotation(this.lastOrientation, orientation), translation: [0, 0, 0] };
         seed = gtsam.pose3Compose(this.lastTransform, turn);
         this.gyroTracking = true;
@@ -72,7 +92,9 @@ export class SlamPipeline {
         const relative = gtsam.pose3Between(this.lastTransform, metrics.transform);
         const distance = Math.hypot(...relative.translation);
         const turn = angleOf(relative);
-        if (metrics.fitness < 0.50 || distance > 0.65 || (!rotated && turn > 0.57)) {
+        if (tracked) {
+          if (distance < 0.020 && turn < 0.018) return { accepted: false, reason: 'still', fitness: metrics.fitness };
+        } else if (metrics.fitness < 0.50 || distance > 0.65 || (!rotated && turn > 0.57)) {
           // After a second of lost frames, re-anchor at the gyro pose so tracking
           // does not wait for the camera to return to the last accepted view.
           if (!rotated || ++this.lostFrames < 4) {
@@ -88,6 +110,7 @@ export class SlamPipeline {
     }
     this.lostFrames = 0;
     this.lastOrientation = orientation;
+    this.lastPose = pose;
     this.lastTransform = metrics.transform;
     this.frames.push({ registered: metrics.transform });
     this.pending.push(transformCloud(points, metrics.transform));

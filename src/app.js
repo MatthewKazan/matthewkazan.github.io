@@ -1,5 +1,5 @@
 import { MapViewer } from './viewer.js?v=6';
-import { createCameraRecorder } from './camera.js?v=14';
+import { createCameraRecorder } from './camera.js?v=15';
 import { drawLoopOverview } from './loop-overview.js?v=7';
 
 const byId = (id) => document.getElementById(id);

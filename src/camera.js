@@ -1,5 +1,5 @@
-import { depthInputSize } from './depth.js?v=10';
-import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=10';
+import { depthInputSize } from './depth.js?v=11';
+import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=11';
 import { drawLoopOverview } from './loop-overview.js?v=7';
 
 const workerTimeout = 60_000;
@@ -375,6 +375,23 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     }, delay);
   }
 
+  function addSample(scan, data) {
+    scan.samples.push({ points: data.points, colors: data.colors });
+    scan.poses = data.poses;
+    scan.initial = data.initial;
+    if (data.loops > scan.loops) {
+      scan.loop = data.match;
+      corrected = true;
+      scan.loopSummary = loopEvidence(data.match) + ' · GTSAM corrected the map.';
+    }
+    scan.loops = data.loops;
+    scan.feedback = data.tracking || scan.loopSummary || 'Tracking image features.';
+    if (open) {
+      viewer.addFrame(scan.samples.at(-1));
+      showMap();
+    }
+  }
+
   function handleWorkerMessage(event) {
     if (event.currentTarget !== worker) return;
     const { data } = event;
@@ -396,6 +413,24 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
       renderControls();
       return;
     }
+    if (data.type === 'rebuild') {
+      // The worker calibrated the focal length and replays its buffered frames.
+      scan.samples = [];
+      scan.poses = [];
+      scan.initial = [];
+      scan.loops = 0;
+      scan.loop = null;
+      scan.loopSummary = data.message;
+      scan.feedback = data.message;
+      resetMap();
+      renderControls();
+      return;
+    }
+    if (data.replay) {
+      if (data.type === 'frame') addSample(scan, data);
+      renderControls();
+      return;
+    }
     clearWorkerDeadline();
     scan.stage = '';
     if (data.type === 'ready') {
@@ -405,20 +440,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
       scan.waiting = false;
       scan.processed++;
       if (data.type === 'frame') {
-        scan.samples.push({ points: data.points, colors: data.colors });
-        scan.poses = data.poses;
-        scan.initial = data.initial;
-        if (data.loops > scan.loops) {
-          scan.loop = data.match;
-          corrected = true;
-          scan.loopSummary = loopEvidence(data.match) + ' · GTSAM corrected the map.';
-        }
-        scan.loops = data.loops;
-        scan.feedback = scan.loopSummary;
-        if (open) {
-          viewer.addFrame(scan.samples.at(-1));
-          showMap();
-        }
+        addSample(scan, data);
       } else {
         scan.feedback = data.message;
       }
