@@ -5,7 +5,7 @@ async function cameraFixture(t) {
   const ids = [
     'camera-preview', 'camera-prompt', 'depth-status', 'record-camera',
     'stop-camera', 'recording-rate', 'camera-frame-count', 'camera-feedback',
-    'loop-comparison', 'loop-overview', 'loop-before', 'loop-after', 'loop-evidence', 'loop-shift',
+    'upload-camera', 'upload-video', 'loop-comparison', 'loop-overview', 'loop-before', 'loop-after', 'loop-evidence', 'loop-shift',
   ];
   const elements = new Map(ids.map((id) => [id, new EventTarget()]));
   const video = elements.get('camera-preview');
@@ -83,7 +83,7 @@ async function cameraFixture(t) {
     });
   }
 
-  const { createCameraRecorder } = await import('../src/camera.js?v=13');
+  const { createCameraRecorder } = await import('../src/camera.js?v=14');
   const setState = t.mock.fn();
   const recorder = createCameraRecorder({
     viewer: { clear() {}, addFrame() {}, setVisible() { return 0; } },
@@ -192,7 +192,7 @@ test('a silent worker is replaced and retry can reload the model without droppin
 });
 
 test('device orientation maps to the rear camera frame used by the scans', async () => {
-  const { cameraOrientation } = await import('../src/camera.js?v=13');
+  const { cameraOrientation } = await import('../src/camera.js?v=14');
   const { rotationMatrix } = await import('../src/registration.js?v=6');
   const axes = (event, angle) => {
     const m = rotationMatrix(cameraOrientation(event, angle));

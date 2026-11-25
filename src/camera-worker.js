@@ -74,7 +74,7 @@ async function processFrame(scan, { width, height, rgba, orientation }) {
   const positions = viewingPoints(points);
   const poses = scan.slam.poses(true).map(viewingPose);
   // Odometry-only poses, for comparing the map before and after loop closure.
-  const initial = scan.slam.loops.length ? scan.slam.poses(false).map(viewingPose) : poses;
+  const initial = scan.slam.poses(false).map(viewingPose);
   send(scan, 'frame', {
     points: positions, colors, poses, initial, loops: scan.slam.loops.length,
     match: result.loops ? scan.slam.latestLoop() : undefined,

@@ -1,6 +1,6 @@
 import { MapViewer } from './viewer.js?v=6';
-import { createCameraRecorder } from './camera.js?v=13';
-import { drawLoopOverview } from './loop-overview.js?v=6';
+import { createCameraRecorder } from './camera.js?v=14';
+import { drawLoopOverview } from './loop-overview.js?v=7';
 
 const byId = (id) => document.getElementById(id);
 const modes = [...document.querySelectorAll('[data-mode]')];
@@ -268,6 +268,25 @@ try {
     else setPlaying(false);
   });
   // In camera mode the recorder handles these buttons.
+  // iOS range inputs only move when the small thumb is grabbed, and ignore taps on
+  // the track. Touches anywhere on the scrubber seek to that position instead.
+  const seek = (event) => {
+    const { left, width } = frame.getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (event.clientX - left - 6) / Math.max(1, width - 12)));
+    const value = String(Math.round(Number(frame.min) + fraction * (Number(frame.max) - Number(frame.min))));
+    if (value === frame.value) return;
+    frame.value = value;
+    frame.dispatchEvent(new Event('input'));
+  };
+  frame.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'touch' || frame.disabled) return;
+    event.preventDefault();
+    frame.setPointerCapture(event.pointerId);
+    seek(event);
+  });
+  frame.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'touch' && frame.hasPointerCapture(event.pointerId)) seek(event);
+  });
   before.addEventListener('click', () => mode === 'replay' && showCorrection(false));
   after.addEventListener('click', () => mode === 'replay' && showCorrection(true));
   byId('reset-view').addEventListener('click', () => viewer.reset());

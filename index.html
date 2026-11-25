@@ -29,8 +29,8 @@
   </script>
   <script type="module" src="./src/preload-depth.js?v=10" async></script>
   <link rel="icon" href="./assets/mk.png" type="image/png">
-  <link rel="stylesheet" href="./styles.css?v=6">
-  <script type="module" src="./src/app.js?v=12"></script>
+  <link rel="stylesheet" href="./styles.css?v=7">
+  <script type="module" src="./src/app.js?v=13"></script>
 </head>
 <body>
   <a href="#main" class="skip">Skip to content</a>
@@ -85,7 +85,8 @@
           <video id="camera-preview" autoplay playsinline muted hidden aria-label="Local camera preview"></video>
           <div id="camera-prompt" class="map-message" hidden>
             <strong>Map with your camera</strong>
-            <p>Move slowly so the views overlap. The map keeps building from queued frames after you stop recording.</p>
+            <p>Move slowly so the views overlap, or upload a video. The map keeps building from queued frames after you stop.</p>
+            <p class="approximation">A rough approximation of the project: browsers cannot read the iPhone’s LiDAR, so a neural network estimates depth from each image instead, which is far less accurate.</p>
             <small id="depth-status">Downloading depth model…</small>
           </div>
           <div id="map-fallback" class="map-message" hidden>
@@ -113,6 +114,8 @@
         </div>
         <div class="demo-controls camera-controls" id="camera-controls" hidden>
           <button type="button" class="light-button" id="record-camera">Start recording</button>
+          <button type="button" class="light-button" id="upload-camera">Upload video</button>
+          <input type="file" id="upload-video" accept="video/*" hidden>
           <button type="button" class="light-button" id="stop-camera" hidden>Stop recording</button>
           <label class="rate-control" for="recording-rate"><span>Rate</span>
             <select id="recording-rate" title="How often to capture a frame">
@@ -135,6 +138,7 @@
 
     <section class="wrap map-notes" aria-label="SLAM project details">
       <p><b>Depth to map.</b> The original system streamed iPhone LiDAR depth into ROS 2, registered point clouds, and used a factor graph to refine camera poses.</p>
+      <p><b>Camera mode is a rough approximation.</b> Browsers cannot read the iPhone’s LiDAR, so camera mode estimates depth from each image with the MoGe-2 network and tracks the camera with the phone’s motion sensors and image features. Estimated depth is far noisier than LiDAR, so the map is much rougher than the original system’s.</p>
     </section>
 
     <section class="work" id="work" aria-labelledby="work-title">

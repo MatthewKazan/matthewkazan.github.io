@@ -161,7 +161,7 @@ h1 { font-size: clamp(3rem, 5.6vw, 6.1rem); margin-top: 15px; }
 }
 .play { flex: 0 0 auto; min-width: 56px; height: 34px; padding-inline: 7px; font-size: 0.78rem; }
 .play:hover, .light-button:hover { background: white; }
-#frame { appearance: none; -webkit-appearance: none; min-width: 0; width: 100%; background: transparent; cursor: pointer; height: 24px; }
+#frame { appearance: none; -webkit-appearance: none; min-width: 0; width: 100%; background: transparent; cursor: pointer; height: 24px; touch-action: pan-y; }
 #frame::-webkit-slider-runnable-track { height: 4px; border-radius: 10px; background: linear-gradient(to right, #91b0ee var(--progress, 0%), #31425d var(--progress, 0%)); }
 #frame::-webkit-slider-thumb {
   appearance: none;
@@ -230,6 +230,7 @@ h1 { font-size: clamp(3rem, 5.6vw, 6.1rem); margin-top: 15px; }
 .map-message strong { font-size: 1.19rem; }
 .map-message p { max-width: 39ch; color: var(--muted-light); font-size: 0.88rem; }
 .map-message small { color: var(--muted-light); font-size: 0.72rem; }
+.map-message .approximation { font-size: 0.75rem; opacity: 0.85; }
 .light-button { padding: 6px 12px; font-size: 0.84rem; }
 .camera-controls { justify-content: flex-start; flex-wrap: wrap; padding-block: 8px; }
 .rate-control { display: inline-flex; align-items: center; gap: 7px; font-size: 0.8rem; color: var(--muted-light); }

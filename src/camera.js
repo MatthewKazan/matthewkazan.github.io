@@ -1,6 +1,6 @@
 import { depthInputSize } from './depth.js?v=10';
 import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=10';
-import { drawLoopOverview } from './loop-overview.js?v=6';
+import { drawLoopOverview } from './loop-overview.js?v=7';
 
 const workerTimeout = 60_000;
 
@@ -32,6 +32,8 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
   const prompt = document.getElementById('camera-prompt');
   const depthStatus = document.getElementById('depth-status');
   const start = document.getElementById('record-camera');
+  const uploadButton = document.getElementById('upload-camera');
+  const upload = document.getElementById('upload-video');
   const stop = document.getElementById('stop-camera');
   const rate = document.getElementById('recording-rate');
   const counter = document.getElementById('camera-frame-count');
@@ -86,17 +88,18 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     if (depthStatus.textContent !== modelStatus) depthStatus.textContent = modelStatus;
     start.hidden = phase === 'opening' || phase === 'recording' || phase === 'draining';
     start.textContent = phase === 'failed' ? 'Retry mapping' : captured ? 'Record again' : 'Start recording';
+    uploadButton.hidden = start.hidden || phase === 'failed';
     stop.hidden = phase !== 'opening' && phase !== 'recording' && phase !== 'failed';
-    stop.textContent = phase === 'failed' ? 'Discard recording' : 'Stop recording';
+    stop.textContent = phase === 'failed' ? 'Discard recording' : recording?.file ? 'Stop video' : 'Stop recording';
     prompt.hidden = !!phase;
 
     let status = 'Camera off';
     let message = cameraMessage;
     const stage = recording?.stage && recording.stage + ' · frame ' + (recording.processed + 1);
     const preparation = recording?.restarted ? 'Restarting depth processing · ' + modelStatus : modelStatus;
-    if (phase === 'opening') status = 'Waiting for camera';
+    if (phase === 'opening') status = recording.file ? 'Opening video' : 'Waiting for camera';
     if (phase === 'recording') {
-      status = 'Recording';
+      status = recording.file ? 'Reading video' : 'Recording';
       message = recording.ready ? stage || recording.feedback : preparation;
     }
     if (phase === 'draining') {
@@ -119,15 +122,17 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     return source + ' · ICP ' + Math.round(fitness * 100) + '%';
   }
 
-  // Draws the mapped frames. Once a loop is verified, the same Before closure and
-  // After GTSAM switch as the replay compares odometry poses with optimized ones.
+  // Draws the mapped frames. The same Before closure and After GTSAM switch as the
+  // replay compares odometry poses with optimized ones; until a loop is verified
+  // the two match.
   function showMap() {
     if (!open) return;
     const scan = recording;
     const count = scan?.samples.length ?? 0;
-    const loop = scan?.loop && scan.initial?.length === count ? scan.loop : null;
-    comparison.hidden = overview.hidden = !loop;
-    if (!loop) {
+    const comparing = count > 1 && scan.initial?.length === count;
+    const loop = comparing ? scan.loop : null;
+    comparison.hidden = overview.hidden = !comparing;
+    if (!comparing) {
       describePoints(viewer.setVisible(count, scan?.poses ?? []));
       return;
     }
@@ -136,11 +141,11 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     before.setAttribute('aria-pressed', String(!corrected));
     after.setAttribute('aria-pressed', String(corrected));
     drawLoopOverview(document.getElementById('loop-path'), scan.initial, scan.poses, loop, amount);
-    evidence.textContent = loopEvidence(loop);
-    evidence.title = 'Matched keyframes ' + (loop.from + 1) + ' and ' + (loop.to + 1);
+    evidence.textContent = loop ? loopEvidence(loop) : 'No loop verified yet';
+    evidence.title = loop ? 'Matched keyframes ' + (loop.from + 1) + ' and ' + (loop.to + 1) : '';
     const largest = scan.poses.reduce((most, { translation }, i) => Math.max(most,
       Math.hypot(...translation.map((value, axis) => value - scan.initial[i].translation[axis]))), 0);
-    shift.textContent = 'Largest pose correction ' + Math.round(largest * 1000) + ' mm';
+    shift.textContent = loop ? 'Largest pose correction ' + Math.round(largest * 1000) + ' mm' : '';
   }
 
   function resetMap() {
@@ -161,6 +166,11 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
     video.srcObject = null;
+    if (video.src) {
+      URL.revokeObjectURL(video.src);
+      video.removeAttribute('src');
+      video.load?.();
+    }
     video.hidden = true;
   }
 
@@ -267,9 +277,87 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     renderControls();
   }
 
+  // Downscales the current video frame and queues it as a JPEG with the latest
+  // device orientation (null for uploaded videos).
+  function captureFrame(scan) {
+    const { width, height } = depthInputSize(video.videoWidth, video.videoHeight);
+    if (captureCanvas.width !== width || captureCanvas.height !== height) {
+      captureCanvas.width = width;
+      captureCanvas.height = height;
+    }
+    captureContext.drawImage(video, 0, 0, width, height);
+    const image = captureCanvas.toDataURL('image/jpeg', 0.93);
+    if (image === 'data:,') throw new Error('Could not capture a frame.');
+    // Keep the sampled images in order, including while inference is busy.
+    // JPEG keeps a long backlog small enough for the phone.
+    scan.images.push(image);
+    scan.orientations.push(scan.file ? null : orientation);
+    scan.captured++;
+    scan.videoTime = video.currentTime;
+    scan.lastCapture = performance.now();
+    processNext(scan);
+    renderControls();
+  }
+
+  // Steps through an uploaded video at the selected rate. It only seeks ahead
+  // while the depth queue is short, so long videos do not pile up in memory.
+  async function readVideo(scan) {
+    const step = 1 / (Number(rate.value) || 4);
+    const seek = (time) => new Promise((resolve, reject) => {
+      video.addEventListener('seeked', resolve, { once: true });
+      video.addEventListener('error', reject, { once: true });
+      video.currentTime = time;
+    });
+    try {
+      for (let time = 0; time < video.duration; time += step) {
+        while (recording === scan && scan.phase === 'recording' && scan.captured - scan.processed > 2) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        if (recording !== scan || scan.phase !== 'recording') return;
+        await seek(time);
+        if (recording !== scan || scan.phase !== 'recording') return;
+        captureFrame(scan);
+      }
+      stopCapture();
+    } catch {
+      if (recording === scan) stopCapture('The video could not be read to the end. Processing the frames read so far.');
+    }
+  }
+
+  async function startUpload(file) {
+    if (!file || (recording && recording.phase !== 'complete')) return;
+    const scan = {
+      previous: recording, phase: 'opening', file: file.name, images: [], orientations: [], captured: 0,
+      processed: 0, samples: [], lastCapture: -Infinity, videoTime: -Infinity,
+    };
+    recording = scan;
+    cameraMessage = '';
+    renderControls();
+    try {
+      video.srcObject = null;
+      video.muted = true;
+      video.src = URL.createObjectURL(file);
+      video.hidden = false;
+      await new Promise((resolve, reject) => {
+        video.addEventListener('loadeddata', resolve, { once: true });
+        video.addEventListener('error', () => reject(new Error('This browser cannot play that video.')), { once: true });
+      });
+      // Some mobile browsers only draw a video frame after it has played once.
+      await video.play().catch(() => {});
+      video.pause();
+      if (recording !== scan) return;
+      scan.phase = 'recording';
+      delete scan.previous;
+      beginMapping(scan);
+      readVideo(scan);
+    } catch (error) {
+      if (recording === scan) failMapping(scan, error.message);
+    }
+  }
+
   function scheduleCapture() {
     const scan = recording;
-    if (scan?.phase !== 'recording' || document.hidden || timer !== null) return;
+    if (scan?.phase !== 'recording' || scan.file || document.hidden || timer !== null) return;
     const interval = 1000 / (Number(rate.value) || 4);
     const delay = Math.max(25, interval - (performance.now() - scan.lastCapture));
     timer = setTimeout(() => {
@@ -278,23 +366,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
       if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth &&
           video.currentTime !== scan.videoTime) {
         try {
-          const { width, height } = depthInputSize(video.videoWidth, video.videoHeight);
-          if (captureCanvas.width !== width || captureCanvas.height !== height) {
-            captureCanvas.width = width;
-            captureCanvas.height = height;
-          }
-          captureContext.drawImage(video, 0, 0, width, height);
-          const image = captureCanvas.toDataURL('image/jpeg', 0.93);
-          if (image === 'data:,') throw new Error('Could not capture a frame.');
-          // Keep the sampled images in order, including while inference is busy.
-          // JPEG keeps a long backlog small enough for the phone.
-          scan.images.push(image);
-          scan.orientations.push(orientation);
-          scan.captured++;
-          scan.videoTime = video.currentTime;
-          scan.lastCapture = performance.now();
-          processNext(scan);
-          renderControls();
+          captureFrame(scan);
         } catch {
           stopCapture('Camera capture stopped. Processing the saved frames.');
         }
@@ -458,9 +530,14 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
   }
 
   start.addEventListener('click', startRecording);
+  uploadButton.addEventListener('click', () => upload.click());
+  upload.addEventListener('change', () => {
+    startUpload(upload.files?.[0]);
+    upload.value = '';
+  });
   for (const [button, value] of [[before, false], [after, true]]) {
     button?.addEventListener('click', () => {
-      if (!open || !recording?.loop) return;
+      if (!open || !recording?.samples.length) return;
       corrected = value;
       showMap();
     });

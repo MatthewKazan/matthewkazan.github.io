@@ -14,13 +14,19 @@ export function drawLoopOverview(canvas, before, after, loop, correction) {
     height / 2 + (pz - (minZ + maxZ) / 2) * scale,
   ];
 
+  context.clearRect(0, 0, width, height);
+  const amber = '#ffc18b';
+  const mint = '#85ebcf';
+  context.lineJoin = 'round';
+  context.lineCap = 'round';
+  if (!loop) {
+    drawPaths();
+    return;
+  }
   const older = project(before[loop.fromFrame].translation);
   const newer = project(before[loop.toFrame].translation);
   const correctedOlder = project(after[loop.fromFrame].translation);
   const correctedNewer = project(after[loop.toFrame].translation);
-  context.clearRect(0, 0, width, height);
-  context.lineJoin = 'round';
-  context.lineCap = 'round';
 
   function line(points, color, opacity, dashed = false) {
     context.beginPath();
@@ -33,6 +39,12 @@ export function drawLoopOverview(canvas, before, after, loop, correction) {
     context.stroke();
   }
 
+  function drawPaths() {
+    if (before.length < 2) return;
+    line(before.map(({ translation }) => project(translation)), amber, 0.85 - 0.35 * correction, true);
+    line(after.map(({ translation }) => project(translation)), mint, 0.48 + 0.52 * correction);
+  }
+
   function marker(point, color, radius) {
     context.beginPath();
     context.arc(...point, radius, 0, 2 * Math.PI);
@@ -41,10 +53,7 @@ export function drawLoopOverview(canvas, before, after, loop, correction) {
     context.fill();
   }
 
-  const amber = '#ffc18b';
-  const mint = '#85ebcf';
-  line(before.map(({ translation }) => project(translation)), amber, 0.85 - 0.35 * correction, true);
-  line(after.map(({ translation }) => project(translation)), mint, 0.48 + 0.52 * correction);
+  drawPaths();
   const matchedA = older.map((value, axis) => value + (correctedOlder[axis] - value) * correction);
   const matchedB = newer.map((value, axis) => value + (correctedNewer[axis] - value) * correction);
   line([matchedA, matchedB], '#f2f7ff', 0.75, true);
