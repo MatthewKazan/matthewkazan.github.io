@@ -1,5 +1,7 @@
-import { depthInputSize } from './depth.js?v=6';
-import { getCameraWorker, modelStatus } from './preload-depth.js?v=7';
+import { depthInputSize } from './depth.js?v=8';
+import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=8';
+
+const workerTimeout = 60_000;
 
 export function createCameraRecorder({ viewer, setState, describePoints }) {
   const video = document.getElementById('camera-preview');
@@ -19,6 +21,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
   let stream;
   let nextId = 0;
   let timer = null;
+  let workerDeadline = null;
   let open = false;
   let cameraMessage = '';
 
@@ -39,15 +42,18 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
 
     let status = 'Camera off';
     let message = cameraMessage;
+    const stage = recording?.stage && recording.stage + ' · frame ' + (recording.processed + 1);
+    const preparation = recording?.restarted ? 'Restarting depth processing · ' + modelStatus : modelStatus;
     if (phase === 'opening') status = 'Waiting for camera';
     if (phase === 'recording') {
       status = 'Recording';
-      message = recording.ready ? recording.feedback : modelStatus;
+      message = recording.ready ? stage || recording.feedback : preparation;
     }
     if (phase === 'draining') {
       status = 'Building map';
       message ||= 'Keep this page open while the map builds.';
-      if (!recording.ready) message = modelStatus + ' · ' + message;
+      if (!recording.ready) message = preparation + ' · ' + message;
+      else if (stage) message = stage + ' · ' + message;
     }
     if (phase === 'complete') status = mapped ? 'Recording processed' : 'No frames mapped';
     if (phase === 'failed') status = 'Mapping paused';
@@ -77,8 +83,39 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     video.hidden = true;
   }
 
+  function clearWorkerDeadline() {
+    clearTimeout(workerDeadline);
+    workerDeadline = null;
+  }
+
   function releaseWorker(scan) {
+    clearWorkerDeadline();
     if (scan?.id) worker?.postMessage({ type: 'stop', id: scan.id });
+  }
+
+  function restartMapping(scan, message) {
+    const refresh = !scan.ready;
+    resetCameraWorker(worker);
+    worker = null;
+    if (scan.restarted) {
+      failMapping(scan, message + (scan.captured ? ' Retry mapping will fetch the model again.' : ''));
+      return;
+    }
+    scan.restarted = true;
+    beginMapping(scan, { forceWasm: true, refresh });
+  }
+
+  function watchWorker(scan) {
+    clearWorkerDeadline();
+    if (document.hidden) return;
+    const id = scan.id;
+    workerDeadline = setTimeout(() => {
+      if (recording !== scan || scan.id !== id) return;
+      const message = scan.ready
+        ? (scan.stage || 'Processing') + ' stalled at frame ' + (scan.processed + 1) + '.'
+        : 'Depth model startup stalled.';
+      restartMapping(scan, message);
+    }, workerTimeout);
   }
 
   function failMapping(scan, message) {
@@ -108,6 +145,8 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     }
     if (!scan.ready) return;
     scan.waiting = true;
+    scan.stage = 'Reading saved frame';
+    watchWorker(scan);
     const id = scan.id;
     try {
       const image = new Image();
@@ -182,16 +221,26 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
   function handleWorkerMessage(event) {
     if (event.currentTarget !== worker) return;
     const { data } = event;
+    const scan = recording;
+    const mapping = scan?.phase === 'recording' || scan?.phase === 'draining';
     if (data.type === 'model-status') {
+      if (mapping && !scan.ready) watchWorker(scan);
       renderControls();
       return;
     }
-    const scan = recording;
-    if (!scan || data.id !== scan.id || (scan.phase !== 'recording' && scan.phase !== 'draining')) return;
+    if (!mapping || data.id !== scan.id) return;
     if (data.type === 'error') {
-      failMapping(scan, data.message);
+      restartMapping(scan, data.message);
       return;
     }
+    if (data.type === 'frame-stage') {
+      scan.stage = data.message;
+      watchWorker(scan);
+      renderControls();
+      return;
+    }
+    clearWorkerDeadline();
+    scan.stage = '';
     if (data.type === 'ready') {
       scan.ready = true;
     } else if (data.type === 'frame' || data.type === 'skipped') {
@@ -218,44 +267,51 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     renderControls();
   }
 
-  function connectWorker() {
-    const next = getCameraWorker();
+  function connectWorker(options) {
+    const next = getCameraWorker(options);
     if (!next || next === worker) return next;
     worker = next;
     worker.addEventListener('message', handleWorkerMessage);
-    worker.addEventListener('error', () => {
+    const onWorkerError = () => {
       const scan = recording;
       if (worker === next && (scan?.phase === 'recording' || scan?.phase === 'draining')) {
-        failMapping(scan, 'The depth worker stopped. Retry mapping to use the saved frames.');
+        restartMapping(scan, 'The depth worker stopped.');
       } else {
         renderControls();
       }
-    });
+    };
+    worker.addEventListener('error', onWorkerError);
+    worker.addEventListener('messageerror', onWorkerError);
     return worker;
   }
 
-  function beginMapping(scan) {
+  function beginMapping(scan, options) {
     scan.id = ++nextId;
     scan.ready = scan.waiting = false;
+    scan.stage = '';
     scan.processed = scan.loops = 0;
     scan.loopSummary = '';
     scan.feedback = 'Move slowly and keep some of the previous view in sight.';
     scan.samples = [];
     scan.poses = [];
     resetMap();
-    if (!connectWorker()) {
+    if (!connectWorker(options)) {
       failMapping(scan, 'This browser could not start the depth worker.');
       return;
     }
     worker.postMessage({ type: 'start', id: scan.id });
     cameraMessage = '';
+    watchWorker(scan);
     renderControls();
   }
 
   async function startRecording() {
     if (recording?.phase === 'failed') {
+      resetCameraWorker(worker);
+      worker = null;
       recording.phase = 'draining';
-      beginMapping(recording);
+      recording.restarted = true;
+      beginMapping(recording, { forceWasm: true, refresh: true });
       return;
     }
     if (recording && recording.phase !== 'complete') return;
@@ -320,8 +376,16 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
     scheduleCapture();
   });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) cancelTimer();
-    else scheduleCapture();
+    if (document.hidden) {
+      cancelTimer();
+      clearWorkerDeadline();
+      return;
+    }
+    scheduleCapture();
+    const scan = recording;
+    if ((scan?.phase === 'recording' || scan?.phase === 'draining') && (!scan.ready || scan.waiting)) {
+      watchWorker(scan);
+    }
   });
 
   return {
@@ -329,12 +393,16 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
       open = true;
       resetMap();
       renderControls();
-      connectWorker()?.postMessage({ type: 'prepare' });
+      connectWorker();
     },
     close() {
       open = false;
       stopCapture();
     },
-    stop: discardRecording,
+    stop() {
+      discardRecording();
+      resetCameraWorker();
+      worker = null;
+    },
   };
 }

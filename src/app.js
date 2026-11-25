@@ -1,5 +1,5 @@
 import { MapViewer } from './viewer.js?v=6';
-import { createCameraRecorder } from './camera.js?v=7';
+import { createCameraRecorder } from './camera.js?v=8';
 import { drawLoopOverview } from './loop-overview.js?v=6';
 
 const byId = (id) => document.getElementById(id);
@@ -19,6 +19,7 @@ let viewer;
 let camera;
 let mode = 'replay';
 let recording;
+let replayWorker;
 let replayError = '';
 let corrected;
 let maps;
@@ -146,8 +147,18 @@ function loadReplay() {
 }
 
 function startReplayWorker() {
+  if (replayWorker || recording?.complete) return;
+  recording = undefined;
+  replayIndex = 1;
+  previewFrame = 0;
+  correction = 0;
+  replayError = '';
+  frame.disabled = play.disabled = true;
+  byId('frame-count').value = '—';
   const worker = new Worker(new URL('./replay-worker.js?v=7', import.meta.url), { type: 'module' });
+  replayWorker = worker;
   worker.onmessage = ({ data }) => {
+    if (replayWorker !== worker) return;
     if (data.type === 'start') {
       recording = {
         frames: [], initial: [], total: data.total, width: data.width, height: data.height, complete: false,
@@ -186,22 +197,28 @@ function startReplayWorker() {
       if (mode === 'replay') viewer.setReplayMaps(maps);
       if (replayIndex === recording.frames.length && mode === 'replay') finishReplay();
       else updateReplay();
-      worker.terminate();
+      stopReplayWorker();
     } else if (data.type === 'error') {
       replayError = 'Replay processing stopped';
       console.error(data.message);
       setPlaying(false);
       if (mode === 'replay') setState(replayError);
-      worker.terminate();
+      stopReplayWorker();
     }
   };
   worker.onerror = (error) => {
+    if (replayWorker !== worker) return;
     console.error(error.message);
     replayError = 'Could not load replay';
     setPlaying(false);
     if (mode === 'replay') setState(replayError);
-    worker.terminate();
+    stopReplayWorker();
   };
+}
+
+function stopReplayWorker() {
+  replayWorker?.terminate();
+  replayWorker = null;
 }
 
 function changeMode(next) {
@@ -217,12 +234,19 @@ function changeMode(next) {
   byId('loop-comparison').hidden = byId('loop-overview').hidden = true;
   sensorPreview.hidden = true;
   if (mode === 'camera') {
+    stopReplayWorker();
+    if (!recording?.complete) recording = undefined;
     byId('demo-description').textContent = 'Camera RGB-D · ICP · Scan Context · GTSAM';
     camera.open();
   } else {
     byId('demo-description').textContent = replayDescription;
-    setState(replayError || 'Loading example');
-    loadReplay();
+    setState('Loading example');
+    if (recording?.complete) loadReplay();
+    else {
+      viewer.clear();
+      describePoints(0);
+      startReplayWorker();
+    }
   }
 }
 
@@ -249,7 +273,11 @@ try {
   window.addEventListener('pagehide', () => {
     cancelClosureAnimation();
     setPlaying(false);
+    stopReplayWorker();
     camera.stop();
+  });
+  window.addEventListener('pageshow', () => {
+    if (mode === 'replay') startReplayWorker();
   });
 } catch (error) {
   console.error(error);

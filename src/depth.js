@@ -2,6 +2,8 @@ import { MogePost } from '../vendor/moge_post.js';
 
 const ortUrl = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
 const modelUrl = 'https://huggingface.co/Ruicheng/moge-2-vits-normal-onnx/resolve/e50ffda41565591092adea54c6ac83d6212e1e23/model.onnx';
+const modelSize = 140_852_051;
+const modelCache = 'moge-2-weights-v1';
 const tokens = 352;
 
 export function depthInputSize(width, height) {
@@ -12,62 +14,92 @@ export function depthInputSize(width, height) {
   };
 }
 
-export async function downloadDepthModel(progress) {
+async function openModelCache() {
+  return globalThis.caches?.open(modelCache).catch(() => null);
+}
+
+export async function removeCachedDepthModel() {
+  const cache = await openModelCache();
+  await cache?.delete(modelUrl).catch(() => {});
+}
+
+async function fetchDepthModel(progress) {
   progress('Downloading depth model…');
-  const cache = await globalThis.caches?.open('moge-2-weights-v1').catch(() => null);
-  const cached = await cache?.match(modelUrl).catch(() => null);
-  if (cached) {
-    const bytes = new Uint8Array(await cached.arrayBuffer());
-    progress('Depth model downloaded');
-    return bytes;
+  const response = await fetch(modelUrl, { credentials: 'omit', cache: 'no-store', priority: 'low' });
+  if (!response.ok || !response.body) {
+    throw new Error('The depth model download failed (HTTP ' + response.status + ').');
   }
-  const response = await fetch(modelUrl, { credentials: 'omit', priority: 'low' });
-  if (!response.ok) throw new Error('The depth model could not be downloaded.');
-  // Stream into the cache alongside the download so opening Camera can reuse
-  // the same request, and a return visit can reuse the downloaded weights.
-  if (cache) cache.put(modelUrl, response.clone()).catch(() => {});
-  const size = Number(response.headers.get('content-length'));
-  let bytes;
-  if (size > 0 && response.body) {
-    bytes = new Uint8Array(size);
-    const reader = response.body.getReader();
-    let offset = 0;
-    let reportedPercent = -10;
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      bytes.set(value, offset);
-      offset += value.length;
-      const percent = Math.floor(100 * offset / size);
-      if (percent >= reportedPercent + 10) {
+  let received = 0;
+  let reportedPercent = -1;
+  let lastNotice = 0;
+  const body = response.body.pipeThrough(new TransformStream({
+    transform(chunk, controller) {
+      received += chunk.byteLength;
+      if (received > modelSize) throw new Error('The depth model download has the wrong size.');
+      const percent = Math.floor(100 * received / modelSize);
+      const now = performance.now();
+      if (percent !== reportedPercent || now - lastNotice > 2000) {
         progress('Downloading depth model · ' + percent + '%');
         reportedPercent = percent;
+        lastNotice = now;
       }
-    }
-    if (offset !== size) throw new Error('The depth model download was interrupted.');
-  } else {
-    bytes = new Uint8Array(await response.arrayBuffer());
-  }
+      controller.enqueue(chunk);
+    },
+    flush() {
+      if (received !== modelSize) throw new Error('The depth model download was interrupted.');
+    },
+  }));
+  return new Response(body, { headers: { 'Content-Length': String(modelSize) } });
+}
 
+export async function downloadDepthModel(progress, refresh = false) {
+  const cache = await openModelCache();
+  const saved = refresh ? null : await cache?.match(modelUrl).catch(() => null);
+  if (saved && Number(saved.headers.get('content-length')) === modelSize) {
+    progress('Depth model downloaded');
+    return saved;
+  }
+  if (saved) await cache.delete(modelUrl).catch(() => {});
+
+  let response = await fetchDepthModel(progress);
+  if (cache) {
+    try {
+      // Cache the stream directly so preloading does not hold 141 MB of model
+      // weights in JavaScript while the visitor is still browsing.
+      await cache.put(modelUrl, response);
+      const cached = await cache.match(modelUrl);
+      if (cached) {
+        progress('Depth model downloaded');
+        return cached;
+      }
+    } catch (error) {
+      console.warn('Could not save the depth model in browser storage.', error);
+    }
+    if (response.bodyUsed || response.body.locked) response = await fetchDepthModel(progress);
+  }
+  const bytes = await response.arrayBuffer();
   progress('Depth model downloaded');
   return bytes;
 }
 
-export async function loadDepthModel(bytes, progress) {
-  progress('Preparing depth model…');
-  const ort = await import(ortUrl + 'ort.webgpu.min.mjs');
-  ort.env.wasm.wasmPaths = ortUrl;
-  ort.env.wasm.numThreads = 1;
-  const providers = navigator.gpu ? ['webgpu', 'wasm'] : ['wasm'];
+export async function loadDepthModel(weights, progress, forceWasm) {
+  progress('Reading depth model weights…');
+  const bytes = new Uint8Array(weights instanceof Response ? await weights.arrayBuffer() : weights);
+  if (bytes.byteLength !== modelSize) throw new Error('The saved depth model is incomplete.');
+  const providers = !forceWasm && navigator.gpu ? ['webgpu', 'wasm'] : ['wasm'];
   let cause;
   for (const provider of providers) {
     try {
+      progress(provider === 'wasm' ? 'Preparing CPU depth model…' : 'Preparing GPU depth model…');
+      const ort = await import(ortUrl + (provider === 'wasm' ? 'ort.wasm.min.mjs' : 'ort.webgpu.min.mjs'));
+      ort.env.wasm.wasmPaths = ortUrl;
+      ort.env.wasm.numThreads = 1;
       const session = await ort.InferenceSession.create(bytes, {
         executionProviders: [provider],
         graphOptimizationLevel: 'all',
       });
       progress('Depth model ready');
-      return { session, ort };
+      return { session, ort, provider };
     } catch (error) {
       cause = error;
     }

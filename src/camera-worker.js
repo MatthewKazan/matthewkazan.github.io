@@ -1,4 +1,4 @@
-import { downloadDepthModel, estimateCloud, loadDepthModel } from './depth.js?v=6';
+import { downloadDepthModel, estimateCloud, loadDepthModel, removeCachedDepthModel } from './depth.js?v=8';
 import { initGtsam } from './poses.js?v=6';
 import { viewingPoints, viewingPose } from './sensor-frame.js?v=6';
 import { SlamPipeline } from './slam-pipeline.js?v=7';
@@ -7,13 +7,15 @@ let download;
 let preparation;
 let activeScan;
 let processing = Promise.resolve();
+let forceWasm = false;
+let refresh = false;
 
 function modelStatus(message) {
   self.postMessage({ type: 'model-status', message });
 }
 
 function preload() {
-  download ??= downloadDepthModel(modelStatus).catch((error) => {
+  download ??= downloadDepthModel(modelStatus, refresh).catch((error) => {
     download = null;
     modelStatus('Depth model download failed. Start recording to retry.');
     throw error;
@@ -23,9 +25,15 @@ function preload() {
 
 function prepare() {
   preparation ??= Promise.all([preload(), initGtsam()])
-    .then(async ([bytes, gtsam]) => {
-      const depth = await loadDepthModel(bytes, modelStatus);
+    .then(async ([weights, gtsam]) => {
       download = null;
+      let depth;
+      try {
+        depth = await loadDepthModel(weights, modelStatus, forceWasm);
+      } catch (error) {
+        await removeCachedDepthModel();
+        throw error;
+      }
       return { depth, gtsam };
     })
     .catch((error) => {
@@ -44,6 +52,7 @@ async function processFrame(scan, { width, height, rgba }) {
   const { depth } = await prepare();
   if (activeScan !== scan) return;
   const size = width + 'x' + height;
+  send(scan, 'frame-stage', { message: 'Estimating depth' });
   const { points, colors, intrinsics } = await estimateCloud(depth, width, height, rgba, scan.calibration.get(size));
   if (activeScan !== scan) return;
   if (points.length < 360) {
@@ -51,6 +60,7 @@ async function processFrame(scan, { width, height, rgba }) {
     return;
   }
 
+  send(scan, 'frame-stage', { message: 'Aligning scan' });
   const result = scan.slam.addScan(points);
   if (!result.accepted) {
     const message = result.reason === 'lost'
@@ -70,16 +80,16 @@ async function processFrame(scan, { width, height, rgba }) {
 
 self.onmessage = ({ data }) => {
   if (data.type === 'preload') {
+    forceWasm = data.forceWasm;
+    refresh = data.refresh;
     if (!preparation) preload().catch(() => {});
-  } else if (data.type === 'prepare') {
-    prepare().catch(() => {});
   } else if (data.type === 'start') {
     const scan = { id: data.id, calibration: new Map() };
     activeScan = scan;
-    prepare().then(({ gtsam }) => {
+    prepare().then(({ depth, gtsam }) => {
       if (activeScan !== scan) return;
       scan.slam = new SlamPipeline(gtsam, { pointThreshold: 10_000, cameraTracking: true });
-      send(scan, 'ready');
+      send(scan, 'ready', { provider: depth.provider });
     }).catch((error) => {
       send(scan, 'error', { message: error.message });
     });

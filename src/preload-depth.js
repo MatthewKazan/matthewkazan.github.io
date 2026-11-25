@@ -1,20 +1,33 @@
 export let modelStatus = 'Downloading depth model…';
-export let cameraWorker;
+let cameraWorker;
 
-export function getCameraWorker() {
+export function resetCameraWorker(worker = cameraWorker) {
+  if (!worker) return;
+  worker.terminate();
+  if (cameraWorker === worker) {
+    cameraWorker = null;
+    modelStatus = 'Waiting for depth model…';
+  }
+}
+
+export function getCameraWorker({ forceWasm = false, refresh = false } = {}) {
   if (cameraWorker) return cameraWorker;
   try {
-    const worker = new Worker(new URL('./camera-worker.js?v=7', import.meta.url), { type: 'module' });
+    const appleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const worker = new Worker(new URL('./camera-worker.js?v=8', import.meta.url), { type: 'module' });
     worker.addEventListener('message', ({ data }) => {
-      if (data.type === 'model-status') modelStatus = data.message;
+      if (cameraWorker === worker && data.type === 'model-status') modelStatus = data.message;
     });
     worker.addEventListener('error', () => {
-      modelStatus = 'Depth worker unavailable';
-      worker.terminate();
-      if (cameraWorker === worker) cameraWorker = null;
+      if (cameraWorker === worker) {
+        resetCameraWorker(worker);
+        modelStatus = 'Depth worker unavailable';
+      }
     });
     cameraWorker = worker;
-    worker.postMessage({ type: 'preload' });
+    modelStatus = refresh ? 'Fetching a fresh depth model…' : 'Checking saved depth model…';
+    worker.postMessage({ type: 'preload', forceWasm: forceWasm || appleMobile, refresh });
     return worker;
   } catch {
     modelStatus = 'Depth worker unavailable';
