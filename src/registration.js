@@ -1,4 +1,4 @@
-import { identity } from './poses.js';
+import { identity } from './poses.js?v=2';
 
 function buildTree(points, indices, depth = 0) {
   if (!indices.length) return null;
@@ -31,7 +31,7 @@ function nearestMatch(tree, points, x, y, z, match) {
   }
 }
 
-function rotationMatrix({ w, x, y, z }) {
+export function rotationMatrix({ w, x, y, z }) {
   return [
     1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),
     2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w),

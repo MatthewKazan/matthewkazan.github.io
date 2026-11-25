@@ -13,17 +13,17 @@ const loopNoise = {
 
 export { initGtsam };
 
-export function optimizePoses(gtsam, initial, odometry, loops) {
+export function optimizePoses(gtsam, initial, odometry, loops, sigmas = odometryNoise) {
   return withCleanup((track) => {
     const graph = track(new gtsam.NonlinearFactorGraph());
     const values = track(new gtsam.Values());
     graph.addPriorPose3(0, initial[0], 0.0001);
     initial.forEach((pose, index) => {
       values.insertPose3(index, pose);
-      if (index > 0) graph.addBetweenPose3(index - 1, index, odometry[index - 1], odometryNoise);
+      if (index > 0) graph.addBetweenPose3(index - 1, index, odometry[index - 1], sigmas);
     });
-    for (const { from, to, transform } of loops) {
-      graph.addBetweenPose3(from, to, transform, loopNoise);
+    for (const { from, to, transform, noise = loopNoise } of loops) {
+      graph.addBetweenPose3(from, to, transform, noise);
     }
     const result = gtsam.optimize(graph, values, { optimizer: 'lm', maxIterations: 65 });
     track(result.values);

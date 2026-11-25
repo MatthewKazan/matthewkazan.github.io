@@ -1,72 +1,126 @@
-import { MapViewer } from './viewer.js';
-import { depthInputSize } from './depth.js';
+import { MapViewer } from './viewer.js?v=2';
+import { createCameraRecorder } from './camera.js?v=2';
+import { drawLoopOverview } from './loop-overview.js?v=2';
 
 const byId = (id) => document.getElementById(id);
 const modes = [...document.querySelectorAll('[data-mode]')];
-const canvas = byId('map');
 const frame = byId('frame');
 const play = byId('play');
-const loop = byId('loop-toggle');
-const video = byId('camera-preview');
-const capture = byId('capture');
-const startCameraButton = byId('enable-camera');
-const stopCameraButton = byId('stop-camera');
-const feedback = byId('camera-feedback');
-const pointCount = byId('point-count');
+const before = byId('loop-before');
+const after = byId('loop-after');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const number = new Intl.NumberFormat();
 
 let viewer;
+let camera;
 let mode = 'replay';
 let recording;
 let replayError = '';
 let corrected;
+let maps;
 let replayIndex = 1;
 let timer = null;
-let cameraStream;
-let cameraWorker;
-let cameraGeneration = 0;
-let cameraFrames = 0;
-let cameraLoops = 0;
-const cameraLimit = 24;
+let closureDelay = null;
+let transition = null;
+let correction = 0;
 
 function setState(message, solved = false) {
-  byId('state-text').textContent = message;
+  const label = byId('state-text');
+  if (label.textContent !== message) label.textContent = message;
   byId('map-state').dataset.solved = String(solved);
 }
 
 function describePoints(count) {
-  pointCount.textContent = number.format(count) + ' points';
+  const label = byId('point-count');
+  const value = number.format(count) + ' points';
+  if (label.textContent !== value) label.textContent = value;
 }
 
 function updateReplay() {
   if (!recording || mode !== 'replay') return;
   const length = recording.frames.length;
   const finished = replayIndex === length;
-  const solved = finished && corrected && loop.getAttribute('aria-pressed') === 'true';
-  describePoints(viewer.setVisible(replayIndex, solved ? corrected : recording.initial));
+  const comparing = finished && !!corrected;
+  const solved = comparing && correction === 1;
+  const adjustment = comparing ? { poses: corrected, amount: correction } : null;
+  describePoints(viewer.setVisible(replayIndex, recording.initial, adjustment));
   frame.value = String(replayIndex);
   frame.style.setProperty('--progress', (100 * (replayIndex - 1) / (length - 1)) + '%');
   byId('frame-count').value = replayIndex + ' / ' + length;
+  byId('loop-comparison').hidden = byId('loop-overview').hidden = !comparing;
+  if (comparing) {
+    const choosingAfter = solved || transition !== null;
+    before.setAttribute('aria-pressed', String(!choosingAfter));
+    after.setAttribute('aria-pressed', String(choosingAfter));
+    drawLoopOverview(byId('loop-path'), recording.initial, corrected, correction);
+    const poses = solved ? corrected : recording.initial;
+    const end = poses.at(-1).translation;
+    const distance = Math.hypot(...poses[0].translation.map((value, axis) => value - end[axis]));
+    const gap = byId('trajectory-gap');
+    const message = transition !== null ? 'Aligning the start and return scans…'
+      : 'Start–end gap ' + (distance < 0.01 ? '< 1 cm' : distance.toFixed(2) + ' m');
+    if (gap.textContent !== message) gap.textContent = message;
+    gap.dataset.closed = String(solved);
+  }
   if (solved) setState('Loop closed', true);
   else if (finished && replayError) setState(replayError);
   else if (finished && !corrected) setState('Solving pose graph…');
-  else if (finished) setState('Uncorrected odometry');
+  else if (finished) setState(transition !== null ? 'Applying loop closure' : 'Before loop closure');
   else setState(timer ? 'Building map' : 'Replay paused');
+
+  play.textContent = timer ? 'Pause' : finished ? 'Replay' : 'Play';
+  play.setAttribute('aria-label', timer ? 'Pause replay' : finished ? 'Restart replay' : 'Play replay');
+}
+
+function cancelClosureAnimation() {
+  clearTimeout(closureDelay);
+  cancelAnimationFrame(transition);
+  closureDelay = transition = null;
+}
+
+function showCorrection(applyCorrection) {
+  cancelClosureAnimation();
+  if (!applyCorrection || reducedMotion.matches || correction === 1) {
+    correction = applyCorrection ? 1 : 0;
+    updateReplay();
+    return;
+  }
+  const from = correction;
+  const start = performance.now();
+  function animate(now) {
+    const fraction = Math.min(1, (now - start) / 1000);
+    const eased = fraction * fraction * (3 - 2 * fraction);
+    correction = fraction === 1 ? 1 : from + (1 - from) * eased;
+    transition = fraction < 1 ? requestAnimationFrame(animate) : null;
+    updateReplay();
+  }
+  transition = requestAnimationFrame(animate);
+  updateReplay();
+}
+
+function finishReplay() {
+  setPlaying(false);
+  if (!corrected || mode !== 'replay') return;
+  showCorrection(reducedMotion.matches);
+  if (!reducedMotion.matches) {
+    // Show the drifted return view before moving any samples into alignment.
+    closureDelay = setTimeout(() => showCorrection(true), 1800);
+  }
 }
 
 function setPlaying(playing) {
   clearInterval(timer);
   timer = null;
   if (playing && recording && mode === 'replay') {
+    cancelClosureAnimation();
+    correction = 0;
     if (replayIndex === recording.frames.length) replayIndex = 1;
     timer = setInterval(() => {
       replayIndex++;
-      if (replayIndex >= recording.frames.length) setPlaying(false);
+      if (replayIndex >= recording.frames.length) finishReplay();
       else updateReplay();
-    }, 255);
+    }, 290);
   }
-  play.setAttribute('aria-label', timer ? 'Pause replay' : 'Play replay');
-  play.firstElementChild.textContent = timer ? '❚❚' : '▶';
   updateReplay();
 }
 
@@ -74,30 +128,35 @@ function loadReplay() {
   if (!recording) return;
   viewer.clear();
   for (const sample of recording.frames) viewer.addFrame(sample);
+  if (maps) viewer.setReplayMaps(maps);
   frame.max = String(recording.frames.length);
   frame.disabled = false;
   play.disabled = false;
-  loop.disabled = !corrected;
   updateReplay();
 }
 
 function startReplayWorker() {
-  const worker = new Worker(new URL('./replay-worker.js', import.meta.url), { type: 'module' });
+  const worker = new Worker(new URL('./replay-worker.js?v=2', import.meta.url), { type: 'module' });
   worker.onmessage = ({ data }) => {
     if (data.type === 'ready') {
       recording = data;
-      const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      replayIndex = reduceMotion ? recording.frames.length : 7;
+      replayIndex = reducedMotion.matches ? recording.frames.length : 1;
       if (mode === 'replay') {
         loadReplay();
-        if (!reduceMotion) setPlaying(true);
+        if (!reducedMotion.matches) setPlaying(true);
       }
     } else if (data.type === 'solved') {
-      corrected = data.corrected;
-      if (mode === 'replay') {
-        loop.disabled = false;
+      if (!data.maps?.length) {
+        replayError = 'Reload to update the replay';
         updateReplay();
+        worker.terminate();
+        return;
       }
+      corrected = data.corrected;
+      maps = data.maps;
+      if (mode === 'replay') viewer.setReplayMaps(maps);
+      if (recording && replayIndex === recording.frames.length && mode === 'replay') finishReplay();
+      else updateReplay();
       worker.terminate();
     } else if (data.type === 'error') {
       replayError = 'Loop closure unavailable';
@@ -108,179 +167,53 @@ function startReplayWorker() {
   };
   worker.onerror = (error) => {
     console.error(error.message);
-    if (mode === 'replay') setState('Could not load replay');
+    replayError = 'Could not load replay';
+    if (mode === 'replay') setState(replayError);
     worker.terminate();
   };
 }
 
-function showFeedback(message) {
-  feedback.hidden = !message;
-  feedback.textContent = message;
-}
-
 function changeMode(next) {
   if (mode === next) return;
+  if (transition !== null || closureDelay !== null) correction = 1;
+  cancelClosureAnimation();
   setPlaying(false);
-  if (mode === 'camera') stopCamera();
+  if (mode === 'camera') camera.close();
   mode = next;
   for (const button of modes) button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
   byId('replay-controls').hidden = mode !== 'replay';
   byId('camera-controls').hidden = mode !== 'camera';
-  byId('camera-prompt').hidden = mode !== 'camera';
+  byId('loop-comparison').hidden = byId('loop-overview').hidden = true;
   if (mode === 'camera') {
-    viewer.clear(true);
-    cameraFrames = 0;
-    byId('camera-frame-count').textContent = '0 frames';
-    describePoints(0);
-    byId('demo-description').textContent = 'Experimental · Estimated depth';
-    setState('Camera off');
+    byId('demo-description').textContent = 'On-device RGB depth';
+    camera.open();
   } else {
     byId('demo-description').textContent = 'Simulated RGB-D · GTSAM in WebAssembly';
-    setState('Loading example');
+    setState(replayError || 'Loading example');
     loadReplay();
   }
 }
 
-function stopCamera() {
-  cameraGeneration++;
-  cameraStream?.getTracks().forEach((track) => track.stop());
-  cameraStream = null;
-  cameraWorker?.terminate();
-  cameraWorker = null;
-  video.srcObject = null;
-  video.hidden = true;
-  startCameraButton.disabled = false;
-  capture.disabled = true;
-  stopCameraButton.disabled = true;
-  showFeedback('');
-  if (mode === 'camera') {
-    byId('camera-prompt').hidden = false;
-    setState('Camera off');
-  }
-}
-
-async function startCamera() {
-  const generation = ++cameraGeneration;
-  startCameraButton.disabled = true;
-  stopCameraButton.disabled = false;
-  setState('Waiting for camera');
-  showFeedback('');
-  try {
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera permission requires a supported browser over HTTPS.');
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } },
-    });
-    if (generation !== cameraGeneration) {
-      stream.getTracks().forEach((track) => track.stop());
-      return;
-    }
-    cameraStream = stream;
-    video.srcObject = stream;
-    await video.play();
-    if (generation !== cameraGeneration) return;
-    video.hidden = false;
-    byId('camera-prompt').hidden = true;
-    viewer.clear(true);
-    describePoints(0);
-    cameraFrames = 0;
-    cameraLoops = 0;
-    byId('camera-frame-count').textContent = '0 frames';
-    setState('Camera ready');
-    showFeedback('Capture a frame, then move a little before the next capture. Keep some of the previous view in sight.');
-    capture.disabled = false;
-    stream.getVideoTracks().forEach((track) => track.addEventListener('ended', () => {
-      if (generation !== cameraGeneration) return;
-      stopCamera();
-      showFeedback('Camera disconnected. Enable it again to start a new map.');
-    }));
-  } catch (error) {
-    if (generation !== cameraGeneration) return;
-    stopCamera();
-    if (error.name === 'NotAllowedError') showFeedback('Camera permission was declined. You can still use Replay.');
-    else if (error.name === 'NotFoundError') showFeedback('No camera was found. You can still use Replay.');
-    else showFeedback('Camera unavailable. ' + error.message);
-  }
-}
-
-function handleCameraMessage({ data }) {
-  if (data.type === 'progress') {
-    setState(data.message);
-    return;
-  }
-  if (data.type === 'frame') {
-    cameraFrames++;
-    viewer.addFrame(data);
-    describePoints(viewer.setVisible(cameraFrames, data.poses));
-    byId('camera-frame-count').textContent = cameraFrames + (cameraFrames === 1 ? ' frame' : ' frames');
-    if (data.loops > cameraLoops) {
-      setState('Loop closed', true);
-      showFeedback('GTSAM corrected the camera poses after revisiting an earlier view.');
-    } else {
-      setState('Frame added', true);
-      showFeedback('Move a little and capture the next overlapping view.');
-    }
-    cameraLoops = data.loops;
-    if (cameraFrames >= cameraLimit) {
-      showFeedback('Map complete. Orbit to inspect, or stop the camera to start a new capture.');
-      cameraStream?.getVideoTracks().forEach((track) => track.stop());
-      video.srcObject = null;
-      video.hidden = true;
-      cameraWorker?.terminate();
-      cameraWorker = null;
-    }
-  } else {
-    setState(data.type === 'rejected' ? 'Try another view' : 'Frame unavailable');
-    showFeedback(data.message);
-  }
-  capture.disabled = cameraFrames >= cameraLimit;
-}
-
-function captureFrame() {
-  if (!cameraStream || !video.videoWidth || !video.videoHeight) return;
-  const { width, height } = depthInputSize(video.videoWidth, video.videoHeight);
-  const image = document.createElement('canvas');
-  image.width = width;
-  image.height = height;
-  const context = image.getContext('2d', { willReadFrequently: true });
-  context.drawImage(video, 0, 0, width, height);
-  const { data: rgba } = context.getImageData(0, 0, width, height);
-  if (!cameraWorker) {
-    cameraWorker = new Worker(new URL('./camera-worker.js', import.meta.url), { type: 'module' });
-    cameraWorker.onmessage = handleCameraMessage;
-    cameraWorker.onerror = () => {
-      setState('Frame unavailable');
-      showFeedback('The depth worker stopped. Stop the camera and start a new capture to try again.');
-      cameraWorker?.terminate();
-      cameraWorker = null;
-    };
-  }
-  capture.disabled = true;
-  showFeedback('');
-  setState('Processing frame…');
-  cameraWorker.postMessage({ width, height, rgba }, [rgba.buffer]);
-}
-
 try {
-  viewer = new MapViewer(canvas);
+  viewer = new MapViewer(byId('map'));
+  camera = createCameraRecorder({ viewer, setState, describePoints });
   startReplayWorker();
   modes.forEach((button) => button.addEventListener('click', () => changeMode(button.dataset.mode)));
   play.addEventListener('click', () => setPlaying(!timer));
   frame.addEventListener('input', () => {
     replayIndex = frame.valueAsNumber;
-    setPlaying(false);
+    cancelClosureAnimation();
+    correction = 0;
+    if (replayIndex === recording.frames.length) finishReplay();
+    else setPlaying(false);
   });
-  loop.addEventListener('click', () => {
-    loop.setAttribute('aria-pressed', String(loop.getAttribute('aria-pressed') !== 'true'));
-    updateReplay();
-  });
+  before.addEventListener('click', () => showCorrection(false));
+  after.addEventListener('click', () => showCorrection(true));
   byId('reset-view').addEventListener('click', () => viewer.reset());
-  startCameraButton.addEventListener('click', startCamera);
-  stopCameraButton.addEventListener('click', stopCamera);
-  capture.addEventListener('click', captureFrame);
   window.addEventListener('pagehide', () => {
+    cancelClosureAnimation();
     setPlaying(false);
-    if (mode === 'camera') stopCamera();
+    if (mode === 'camera') camera.stop();
   });
 } catch (error) {
   console.error(error);

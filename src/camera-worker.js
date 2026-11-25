@@ -1,75 +1,128 @@
-import { estimateCloud, loadDepthModel } from './depth.js';
-import { identity, initGtsam, optimizePoses } from './poses.js';
-import { angleOf, register } from './registration.js';
+import { downloadDepthModel, estimateCloud, loadDepthModel } from './depth.js?v=2';
+import { identity, initGtsam, optimizePoses } from './poses.js?v=2';
+import { angleOf, register } from './registration.js?v=2';
 
-let depthModel;
-let gtsam;
-const clouds = [];
-let poses = [];
-const odometry = [];
-const loops = [];
+let download;
+let preparation;
+let activeScan;
+let processing = Promise.resolve();
 
-function status(message) {
-  self.postMessage({ type: 'progress', message });
+function modelStatus(message) {
+  self.postMessage({ type: 'model-status', message });
 }
 
-function proposeClosure(points, pose) {
+function preload() {
+  download ??= downloadDepthModel(modelStatus).catch((error) => {
+    download = null;
+    modelStatus('Depth model download failed. Start recording to retry.');
+    throw error;
+  });
+  return download;
+}
+
+function prepare() {
+  preparation ??= Promise.all([preload(), initGtsam()])
+    .then(async ([bytes, gtsam]) => {
+      const depth = await loadDepthModel(bytes, modelStatus);
+      download = null;
+      return { depth, gtsam };
+    })
+    .catch((error) => {
+      modelStatus('Depth model unavailable. Start recording to retry.');
+      preparation = null;
+      throw error;
+    });
+  return preparation;
+}
+
+function send(scan, type, payload = {}, transfer = []) {
+  if (scan === activeScan) self.postMessage({ type, id: scan.id, ...payload }, transfer);
+}
+
+function proposeClosure(gtsam, scan, points, pose) {
+  const { poses, clouds, loops } = scan;
   const last = poses.length - 1;
+  if (loops.length && last - loops.at(-1).to < 6) return null;
+  let candidates = 0;
   for (let index = 0; index < last - 5; index++) {
     const seed = gtsam.pose3Between(poses[index], pose);
     if (Math.hypot(...seed.translation) > 0.55 || angleOf(seed) > 0.35) continue;
-    // Look for an actual return, with a distinct viewpoint along the intervening path.
+    // Avoid closing a loop until the camera has moved away from the earlier view.
     if (!poses.slice(index + 1, last).some((other) =>
       Math.hypot(...gtsam.pose3Between(poses[index], other).translation) > 0.55)) continue;
     const match = register(gtsam, points, clouds[index], seed);
-    if (!match || match.overlap < 0.73 || match.rmse > 0.095) continue;
-    return { from: index, to: last, transform: match.transform };
+    if (match && match.overlap >= 0.73 && match.rmse <= 0.095) {
+      return { from: index, to: last, transform: match.transform };
+    }
+    if (++candidates === 3) break;
   }
   return null;
 }
 
-self.onmessage = async ({ data }) => {
-  try {
-    if (!depthModel) {
-      status('Downloading depth model…');
-      [depthModel, gtsam] = await Promise.all([loadDepthModel(status), initGtsam()]);
-    }
-    status('Estimating depth…');
-    const { points, colors } = await estimateCloud(depthModel, data.width, data.height, data.rgba);
-    if (points.length < 360) {
-      self.postMessage({ type: 'rejected', message: 'Try a well-lit view with surfaces closer to the camera.' });
+async function processFrame(scan, { width, height, rgba }) {
+  const { depth, gtsam } = await prepare();
+  if (activeScan !== scan) return;
+  const { points, colors } = await estimateCloud(depth, width, height, rgba);
+  if (activeScan !== scan) return;
+  if (points.length < 360) {
+    send(scan, 'skipped', { message: 'Try a well-lit view with surfaces closer to the camera.' });
+    return;
+  }
+
+  let pose = identity;
+  if (scan.clouds.length) {
+    const match = register(gtsam, points, scan.clouds.at(-1));
+    const angle = match ? angleOf(match.transform) : Infinity;
+    const distance = match ? Math.hypot(...match.transform.translation) : Infinity;
+    if (!match || match.overlap < 0.48 || match.rmse > 0.14 || angle > 0.42 || distance > 0.7) {
+      send(scan, 'skipped', { message: 'Move back toward the last mapped view, then move slowly.' });
       return;
     }
-    let pose = identity;
-    if (clouds.length) {
-      status('Aligning this frame to the previous view…');
-      const alignment = register(gtsam, points, clouds.at(-1));
-      if (!alignment || alignment.overlap < 0.48 || alignment.rmse > 0.14 ||
-          angleOf(alignment.transform) > 0.42 || Math.hypot(...alignment.transform.translation) > 0.7) {
-        self.postMessage({ type: 'rejected', message: 'Frame did not align. Move closer to the last view and try again.' });
-        return;
-      }
-      odometry.push(alignment.transform);
-      pose = gtsam.pose3Compose(poses.at(-1), alignment.transform);
+    if (angle < 0.045 && distance < 0.045) {
+      send(scan, 'skipped', { message: 'Keep moving slowly to add a new viewpoint.' });
+      return;
     }
-    clouds.push(points);
-    poses.push(pose);
-    const closure = proposeClosure(points, pose);
-    if (closure) {
-      try {
-        status('Optimizing the pose graph…');
-        const candidate = [...loops, closure];
-        poses = optimizePoses(gtsam, poses, odometry, candidate);
-        loops.push(closure);
-      } catch (error) {
-        // An optional loop solve must not discard an otherwise valid odometry frame.
-        console.warn('Camera loop-closure solve failed', error);
-      }
+    scan.odometry.push(match.transform);
+    pose = gtsam.pose3Compose(scan.poses.at(-1), match.transform);
+  }
+
+  scan.clouds.push(points);
+  scan.poses.push(pose);
+  const closure = proposeClosure(gtsam, scan, points, pose);
+  if (closure) {
+    try {
+      const candidate = [...scan.loops, closure];
+      scan.poses = optimizePoses(gtsam, scan.poses, scan.odometry, candidate);
+      scan.loops.push(closure);
+    } catch (error) {
+      console.warn('Camera loop-closure solve failed', error);
     }
-    const positions = points.slice();
-    self.postMessage({ type: 'frame', points: positions, colors, poses, loops: loops.length }, [positions.buffer, colors.buffer]);
-  } catch (error) {
-    console.error('Camera frame could not be processed', error);
-    self.postMessage({ type: 'error', message: error.message || 'Could not process this camera frame.' });
+  }
+  const positions = points.slice();
+  send(scan, 'frame', { points: positions, colors, poses: scan.poses, loops: scan.loops.length },
+    [positions.buffer, colors.buffer]);
+}
+
+self.onmessage = ({ data }) => {
+  if (data.type === 'preload') {
+    if (!preparation) preload().catch(() => {});
+  } else if (data.type === 'prepare') {
+    prepare().catch(() => {});
+  } else if (data.type === 'start') {
+    const scan = { id: data.id, clouds: [], poses: [], odometry: [], loops: [] };
+    activeScan = scan;
+    prepare().then(() => send(scan, 'ready')).catch((error) => {
+      send(scan, 'error', { message: error.message });
+    });
+  } else if (data.id === activeScan?.id) {
+    if (data.type === 'stop') {
+      activeScan = null;
+    } else if (data.type === 'frame') {
+      const scan = activeScan;
+      processing = processing.then(() => processFrame(scan, data)).catch((error) => {
+        console.error('Camera frame could not be processed', error);
+        send(scan, 'error', { message: error.message || 'Could not process the camera frame.' });
+      });
+    }
   }
 };

@@ -92,11 +92,11 @@ function colorAt(surface, x, y, z, column, row, frame) {
 function cameraPose(angle, drift = 0) {
   const x = 2.88 * Math.sin(angle);
   const z = 2.11 * Math.cos(angle);
-  const yaw = Math.atan2(x + 0.25, z + 0.25) + 0.18 * drift;
+  const yaw = Math.atan2(x + 0.25, z + 0.25);
   return {
     yaw,
     rotation: { w: Math.cos(yaw / 2), x: 0, y: Math.sin(yaw / 2), z: 0 },
-    translation: [x + 0.82 * drift, 1.48 + 0.18 * drift, z - 0.62 * drift],
+    translation: [x + 1.36 * drift, 1.48 + 0.18 * drift, z - 0.92 * drift],
   };
 }
 
@@ -149,7 +149,7 @@ export function makeReplay() {
     const angle = 0.37 + fraction * Math.PI * 2;
     const camera = cameraPose(angle);
     ideal.push(camera);
-    initial.push(cameraPose(angle, fraction ** 1.25));
+    initial.push(cameraPose(angle, fraction));
     frames.push(sampleDepth(camera, i));
   }
   return { frames, ideal, initial };

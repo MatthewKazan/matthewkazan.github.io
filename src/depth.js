@@ -12,12 +12,20 @@ export function depthInputSize(width, height) {
   };
 }
 
-export async function loadDepthModel(progress) {
-  const ort = await import(ortUrl + 'ort.webgpu.min.mjs');
-  ort.env.wasm.wasmPaths = ortUrl;
-  ort.env.wasm.numThreads = 1;
-  const response = await fetch(modelUrl);
+export async function downloadDepthModel(progress) {
+  progress('Downloading depth model…');
+  const cache = await globalThis.caches?.open('moge-2-weights-v1').catch(() => null);
+  const cached = await cache?.match(modelUrl).catch(() => null);
+  if (cached) {
+    const bytes = new Uint8Array(await cached.arrayBuffer());
+    progress('Depth model downloaded');
+    return bytes;
+  }
+  const response = await fetch(modelUrl, { credentials: 'omit', priority: 'low' });
   if (!response.ok) throw new Error('The depth model could not be downloaded.');
+  // Stream into the cache alongside the download so opening Camera can reuse
+  // the same request, and a return visit can reuse the downloaded weights.
+  if (cache) cache.put(modelUrl, response.clone()).catch(() => {});
   const size = Number(response.headers.get('content-length'));
   let bytes;
   if (size > 0 && response.body) {
@@ -41,7 +49,15 @@ export async function loadDepthModel(progress) {
     bytes = new Uint8Array(await response.arrayBuffer());
   }
 
-  progress('Initializing depth model…');
+  progress('Depth model downloaded');
+  return bytes;
+}
+
+export async function loadDepthModel(bytes, progress) {
+  progress('Preparing depth model…');
+  const ort = await import(ortUrl + 'ort.webgpu.min.mjs');
+  ort.env.wasm.wasmPaths = ortUrl;
+  ort.env.wasm.numThreads = 1;
   const providers = navigator.gpu ? ['webgpu', 'wasm'] : ['wasm'];
   let cause;
   for (const provider of providers) {
@@ -50,6 +66,7 @@ export async function loadDepthModel(progress) {
         executionProviders: [provider],
         graphOptimizationLevel: 'all',
       });
+      progress('Depth model ready');
       return { session, ort };
     } catch (error) {
       cause = error;
@@ -93,8 +110,8 @@ export async function estimateCloud({ session, ort }, width, height, rgba) {
     const points = new Float32Array(size * 3);
     const colors = new Uint8Array(size * 3);
     let offset = 0;
-    for (let row = 0; row < height; row += 3) {
-      for (let column = 0; column < width; column += 3) {
+    for (let row = 0; row < height; row += 4) {
+      for (let column = 0; column < width; column += 4) {
         const i = row * width + column;
         const z = metric.depth[i];
         if (!mask[i] || z < 0.16 || z > 12 || !Number.isFinite(z)) continue;
