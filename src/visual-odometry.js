@@ -516,7 +516,7 @@ export function describeView({ gray, depth, width, height, intrinsics, scale = 1
   };
   const smooth = boxBlur(gray, width, height);
   const border = patchRadius + 3;
-  const corners = detect({ data: gray, width, height }, depth, [], 10)
+  const corners = detect({ data: gray, width, height }, depth, [], 8)
     .filter(([x, y]) => x >= border && y >= border && x < width - border && y < height - border);
   const pixels = [], points = [];
   const descriptors = new Uint32Array(corners.length * 8);
@@ -557,11 +557,11 @@ export function matchViews(a, b, random = Math.random) {
   const matches = [];
   for (let i = 0; i < a.pixels.length; i++) {
     const forward = nearest(a.descriptors, i, b.descriptors);
-    if (forward.best > 64 || forward.best > 0.8 * forward.second) continue;
+    if (forward.best > 72 || forward.best > 0.85 * forward.second) continue;
     if (nearest(b.descriptors, forward.at, a.descriptors).at !== i) continue;
     matches.push([i, forward.at]);
   }
-  if (matches.length < 20) return null;
+  if (matches.length < 15) return null;
   const pa = matches.map(([i]) => a.points[i]), pb = matches.map(([, j]) => b.points[j]);
   let best = null, bestInliers = [];
   for (let iteration = 0; iteration < 300; iteration++) {
@@ -579,23 +579,28 @@ export function matchViews(a, b, random = Math.random) {
       bestInliers = inliers;
     }
   }
-  if (!best || bestInliers.length < 20) return null;
+  if (!best || bestInliers.length < 12) return null;
   // The pose comes from reprojecting view a's points into view b's image, so
-  // view b's depth errors do not enter it.
+  // view b's depth errors do not enter it. Matches the depth check rejected
+  // but that reproject well rejoin before the final fit.
   const fitted = similarity(pa, pb, bestInliers) ?? best;
   let pose = { rotation: fitted.rotation, translation: fitted.translation };
-  const X = bestInliers.map((i) => pa[i]);
-  const observed = bestInliers.map((i) => b.pixels[matches[i][1]]);
-  pose = refinePose(X, observed, b.camera, pose, false);
-  const matrix = rotationMatrix(pose.rotation);
-  let inliers = 0;
-  for (let k = 0; k < X.length; k++) {
-    const p = apply(matrix, X[k]).map((v, axis) => v + pose.translation[axis]);
-    if (p[2] < 0.05) continue;
-    const ex = b.camera.fx * p[0] / p[2] + b.camera.cx - observed[k][0];
-    const ey = b.camera.fy * p[1] / p[2] + b.camera.cy - observed[k][1];
-    if (Math.hypot(ex, ey) < 4) inliers++;
+  let chosen = bestInliers;
+  const observed = matches.map(([, j]) => b.pixels[j]);
+  for (let round = 0; round < 2; round++) {
+    pose = refinePose(chosen.map((i) => pa[i]), chosen.map((i) => observed[i]), b.camera, pose, false);
+    const matrix = rotationMatrix(pose.rotation);
+    chosen = [];
+    for (let i = 0; i < matches.length; i++) {
+      const p = apply(matrix, pa[i]).map((v, axis) => v + pose.translation[axis]);
+      if (p[2] < 0.05) continue;
+      const ex = b.camera.fx * p[0] / p[2] + b.camera.cx - observed[i][0];
+      const ey = b.camera.fy * p[1] / p[2] + b.camera.cy - observed[i][1];
+      if (Math.hypot(ex, ey) < 5) chosen.push(i);
+    }
+    if (chosen.length < 6) return null;
   }
-  if (inliers < 20 || inliers < 0.3 * matches.length) return null;
+  const inliers = chosen.length;
+  if (inliers < 15 || inliers < 0.3 * matches.length) return null;
   return { pose, inliers, matches: matches.length };
 }

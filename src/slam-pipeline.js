@@ -3,7 +3,7 @@ import { mergeClouds, rejectStatisticalOutliers, transformCloud, voxelDownsample
 import { identity, optimizePoses } from './poses.js?v=6';
 import { angleOf } from './registration.js?v=6';
 import { cosineSimilarity, scanContext } from './scan-context.js?v=6';
-import { describeView, matchViews } from './visual-odometry.js?v=2';
+import { describeView, matchViews } from './visual-odometry.js?v=3';
 
 const odometrySigmas = [0.3, 0.3, 0.3, 0.15, 0.15, 0.15];
 const loopNoise = {
@@ -222,6 +222,13 @@ export class SlamPipeline {
       if (!previous.view) continue;
       const match = matchViews(previous.view, current.view, this.random);
       if (!match) continue;
+      // Odometry drifts slowly, so a weak match far from the current estimate is
+      // a view that only looks alike. Without the gyro, rotation can drift tens of
+      // degrees over a full turn, so strong matches may correct more.
+      const disagreement = gtsam.pose3Between(gtsam.pose3Between(current.pose, previous.pose), match.pose);
+      const shift = Math.hypot(...disagreement.translation), turn = angleOf(disagreement);
+      const strong = match.inliers >= 25;
+      if (shift > (strong ? 2 : 1) || turn > (strong ? 1 : 0.35)) continue;
       this.loops.push({
         from, to: index,
         transform: gtsam.pose3Inverse(match.pose), noise: loopNoise,

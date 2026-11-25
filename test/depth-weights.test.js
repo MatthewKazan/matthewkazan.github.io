@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { downloadDepthModel } from '../src/depth.js?v=11';
+import { downloadDepthModel } from '../src/depth.js?v=12';
 
 test('an incomplete cached model is replaced and a requested refresh bypasses it', async (t) => {
   const size = 140_852_051;

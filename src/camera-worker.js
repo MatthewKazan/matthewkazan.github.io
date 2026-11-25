@@ -1,8 +1,8 @@
-import { cloudFromDepth, downloadDepthModel, estimateCloud, loadDepthModel, removeCachedDepthModel } from './depth.js?v=11';
+import { cloudFromDepth, downloadDepthModel, estimateCloud, loadDepthModel, removeCachedDepthModel } from './depth.js?v=12';
 import { initGtsam } from './poses.js?v=6';
 import { viewingPoints, viewingPose } from './sensor-frame.js?v=6';
-import { SlamPipeline } from './slam-pipeline.js?v=11';
-import { grayscale, VisualOdometry } from './visual-odometry.js?v=2';
+import { SlamPipeline } from './slam-pipeline.js?v=12';
+import { grayscale, VisualOdometry } from './visual-odometry.js?v=3';
 
 let download;
 let preparation;

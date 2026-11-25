@@ -118,16 +118,25 @@ export async function loadDepthModel(weights, progress, forceWasm, singleThread 
 }
 
 // Back-projects every fourth pixel of a depth map (0 = no depth) through
-// normalized intrinsics, multiplying depth by `scale`.
-export function cloudFromDepth(depth, rgba, width, height, { fx, fy, cx, cy }, scale = 1) {
+// normalized intrinsics, multiplying depth by `scale`. Like the iPhone LiDAR,
+// the cloud stops at `range` metres. Pixels on depth edges are dropped: the
+// network blends foreground and background depth there, which leaves streaks
+// of points in the empty space between them.
+export function cloudFromDepth(depth, rgba, width, height, { fx, fy, cx, cy }, scale = 1, range = 5) {
   const points = new Float32Array(Math.ceil(width / 4) * Math.ceil(height / 4) * 3);
   const colors = new Uint8Array(points.length);
+  const edge = (i, z, step) => {
+    const neighbor = depth[i + step];
+    return !neighbor || Math.abs(neighbor * scale - z) > 0.05 * z;
+  };
   let offset = 0;
   for (let row = 0; row < height; row += 4) {
     for (let column = 0; column < width; column += 4) {
       const i = row * width + column;
       const z = depth[i] * scale;
-      if (!z) continue;
+      if (!z || z > range) continue;
+      if (column >= 2 && column < width - 2 && row >= 2 && row < height - 2 &&
+        (edge(i, z, -2) || edge(i, z, 2) || edge(i, z, -2 * width) || edge(i, z, 2 * width))) continue;
       points[offset] = ((column + 0.5) / width - cx) * z / fx;
       points[offset + 1] = ((row + 0.5) / height - cy) * z / fy;
       points[offset + 2] = z;

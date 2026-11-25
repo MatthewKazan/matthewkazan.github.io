@@ -1,5 +1,5 @@
-import { depthInputSize } from './depth.js?v=11';
-import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=12';
+import { depthInputSize } from './depth.js?v=12';
+import { getCameraWorker, modelStatus, resetCameraWorker } from './preload-depth.js?v=13';
 import { drawLoopOverview } from './loop-overview.js?v=7';
 
 const workerTimeout = 60_000;
