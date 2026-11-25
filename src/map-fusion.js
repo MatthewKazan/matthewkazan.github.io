@@ -1,19 +1,4 @@
-import { optimizePoses } from './poses.js?v=2';
-import { rotationMatrix } from './registration.js?v=2';
-
-export function solveReplay(gtsam, { initial, ideal }) {
-  const last = initial.length - 1;
-  const odometry = initial.slice(1).map((pose, index) => gtsam.pose3Between(initial[index], pose));
-  // This synthetic sensor drifts in position and retains a reliable heading.
-  const sigmas = [0.002, 0.002, 0.002, 0.055, 0.055, 0.055];
-  const loop = {
-    from: 0,
-    to: last,
-    transform: gtsam.pose3Between(ideal[0], ideal[last]),
-    noise: [0.002, 0.002, 0.002, 0.006, 0.006, 0.006],
-  };
-  return optimizePoses(gtsam, initial, odometry, [loop], sigmas);
-}
+import { rotationMatrix } from './registration.js?v=6';
 
 // Average the actual projected samples within 4 cm voxels. Both views use
 // the same fusion, with only the pose estimates changing.

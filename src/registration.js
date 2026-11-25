@@ -1,30 +1,64 @@
-import { identity } from './poses.js?v=2';
+import { identity } from './poses.js?v=6';
+import { extremeEigenvector } from './symmetric.js?v=6';
 
-function buildTree(points, indices, depth = 0) {
-  if (!indices.length) return null;
-  const axis = depth % 3;
-  indices.sort((a, b) => points[a + axis] - points[b + axis]);
-  const middle = indices.length >> 1;
-  return {
-    axis,
-    offset: indices[middle],
-    left: buildTree(points, indices.slice(0, middle), depth + 1),
-    right: buildTree(points, indices.slice(middle + 1), depth + 1),
-  };
+function partitionToMedian(points, indices, axis, start, end, median) {
+  while (start < end) {
+    const pivot = points[indices[(start + end) >> 1] + axis];
+    let left = start, right = end;
+    while (left <= right) {
+      while (points[indices[left] + axis] < pivot) left++;
+      while (points[indices[right] + axis] > pivot) right--;
+      if (left <= right) {
+        const value = indices[left];
+        indices[left++] = indices[right];
+        indices[right--] = value;
+      }
+    }
+    if (median <= right) end = right;
+    else if (median >= left) start = left;
+    else break;
+  }
 }
 
-function nearestMatch(tree, points, x, y, z, match) {
-  if (!tree) return;
-  const { axis, offset, left, right } = tree;
-  const dx = x - points[offset];
-  const dy = y - points[offset + 1];
-  const dz = z - points[offset + 2];
-  const squared = dx * dx + dy * dy + dz * dz;
-  if (squared < match.squared) {
-    match.squared = squared;
-    match.offset = offset;
+export function buildTree(points, indices) {
+  function build(start, end) {
+    if (end - start <= 12) return { start, end, indices };
+    let lowX = Infinity, lowY = Infinity, lowZ = Infinity;
+    let highX = -Infinity, highY = -Infinity, highZ = -Infinity;
+    for (let i = start; i < end; i++) {
+      const n = indices[i];
+      const x = points[n], y = points[n + 1], z = points[n + 2];
+      lowX = Math.min(lowX, x); highX = Math.max(highX, x);
+      lowY = Math.min(lowY, y); highY = Math.max(highY, y);
+      lowZ = Math.min(lowZ, z); highZ = Math.max(highZ, z);
+    }
+    const rangeX = highX - lowX, rangeY = highY - lowY, rangeZ = highZ - lowZ;
+    const axis = rangeX >= rangeY && rangeX >= rangeZ ? 0 : rangeY >= rangeZ ? 1 : 2;
+    const middle = (start + end) >> 1;
+    partitionToMedian(points, indices, axis, start, end - 1, middle);
+    return { axis, split: points[indices[middle] + axis], left: build(start, middle), right: build(middle, end) };
   }
-  const split = axis === 0 ? dx : axis === 1 ? dy : dz;
+  return build(0, indices.length);
+}
+
+export function nearestMatch(tree, points, x, y, z, match) {
+  if (!tree) return;
+  if (tree.indices) {
+    for (let i = tree.start; i < tree.end; i++) {
+      const offset = tree.indices[i];
+      const dx = x - points[offset];
+      const dy = y - points[offset + 1];
+      const dz = z - points[offset + 2];
+      const squared = dx * dx + dy * dy + dz * dz;
+      if (squared < match.squared) {
+        match.squared = squared;
+        match.offset = offset;
+      }
+    }
+    return;
+  }
+  const { axis, left, right } = tree;
+  const split = (axis === 0 ? x : axis === 1 ? y : z) - tree.split;
   nearestMatch(split < 0 ? left : right, points, x, y, z, match);
   if (split * split < match.squared) {
     nearestMatch(split < 0 ? right : left, points, x, y, z, match);
@@ -39,7 +73,7 @@ export function rotationMatrix({ w, x, y, z }) {
   ];
 }
 
-function transformPoint(matrix, x, y, z, translation) {
+export function transformPoint(matrix, x, y, z, translation) {
   return [
     matrix[0] * x + matrix[1] * y + matrix[2] * z + translation[0],
     matrix[3] * x + matrix[4] * y + matrix[5] * z + translation[1],
@@ -47,78 +81,20 @@ function transformPoint(matrix, x, y, z, translation) {
   ];
 }
 
-// Horn's quaternion fit for matched 3D points. The shift makes power iteration
-// converge to the largest algebraic eigenvalue even for mostly planar scenes.
-function fitRigid(matches) {
-  const source = [0, 0, 0];
-  const target = [0, 0, 0];
-  for (const { from, to } of matches) {
-    for (let axis = 0; axis < 3; axis++) {
-      source[axis] += from[axis] / matches.length;
-      target[axis] += to[axis] / matches.length;
-    }
-  }
-  const covariance = new Float64Array(9);
-  for (const { from, to } of matches) {
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 3; col++) {
-        covariance[row * 3 + col] += (from[row] - source[row]) * (to[col] - target[col]);
-      }
-    }
-  }
+// Horn's quaternion fit minimizes the same rigid least-squares objective as
+// the SVD used by Open3D's point-to-point estimator.
+export function rigidFit(covariance, source, target) {
   const [xx, xy, xz, yx, yy, yz, zx, zy, zz] = covariance;
   const eigen = [
-    [xx + yy + zz, yz - zy, zx - xz, xy - yx],
-    [yz - zy, xx - yy - zz, xy + yx, zx + xz],
-    [zx - xz, xy + yx, -xx + yy - zz, yz + zy],
-    [xy - yx, zx + xz, yz + zy, -xx - yy + zz],
+    xx + yy + zz, yz - zy, zx - xz, xy - yx,
+    yz - zy, xx - yy - zz, xy + yx, zx + xz,
+    zx - xz, xy + yx, -xx + yy - zz, yz + zy,
+    xy - yx, zx + xz, yz + zy, -xx - yy + zz,
   ];
-  const shift = Math.max(...eigen.map((row) => row.reduce((sum, value) => sum + Math.abs(value), 0)));
-  let unit = [1, 0, 0, 0];
-  for (let i = 0; shift > 0 && i < 26; i++) {
-    const next = eigen.map((row, a) => shift * unit[a] + row.reduce((sum, value, b) => sum + value * unit[b], 0));
-    const norm = Math.hypot(...next);
-    if (norm < 1e-10) break;
-    unit = next.map((value) => value / norm);
-  }
-  const [w, x, y, z] = unit;
+  const [w, x, y, z] = extremeEigenvector(eigen, 4, true);
   const rotation = { w, x, y, z };
   const center = transformPoint(rotationMatrix(rotation), ...source, identity.translation);
   return { rotation, translation: target.map((value, axis) => value - center[axis]) };
-}
-
-// A bounded, trimmed point-to-point ICP for nearby camera views.
-export function register(gtsam, source, target, seed = identity) {
-  const targetStride = 3 * Math.max(1, Math.ceil(target.length / (3 * 2800)));
-  const indices = [];
-  for (let offset = 0; offset < target.length; offset += targetStride) indices.push(offset);
-  const tree = buildTree(target, indices);
-  const stride = 3 * Math.max(1, Math.ceil(source.length / (3 * 1700)));
-  const samples = Math.ceil(source.length / stride);
-  if (samples < 80 || indices.length < 80) return null;
-  let transform = seed;
-  let matches = [];
-  for (let iteration = 0; iteration <= 13; iteration++) {
-    matches = [];
-    const radius = iteration < 4 ? 0.39 : 0.21;
-    const rotation = rotationMatrix(transform.rotation);
-    for (let i = 0; i < source.length; i += stride) {
-      const from = transformPoint(rotation, source[i], source[i + 1], source[i + 2], transform.translation);
-      const match = { squared: radius ** 2, offset: -1 };
-      nearestMatch(tree, target, ...from, match);
-      if (match.offset < 0) continue;
-      const j = match.offset;
-      matches.push({ from, to: [target[j], target[j + 1], target[j + 2]], squared: match.squared });
-    }
-    if (matches.length < Math.max(60, 0.33 * samples)) return null;
-    if (iteration === 13) break;
-    matches.sort((a, b) => a.squared - b.squared);
-    const step = fitRigid(matches.slice(0, Math.floor(matches.length * 0.80)));
-    transform = gtsam.pose3Compose(step, transform);
-  }
-  const overlap = matches.length / samples;
-  const rmse = Math.sqrt(matches.reduce((sum, match) => sum + match.squared, 0) / matches.length);
-  return { transform, overlap, rmse };
 }
 
 export function angleOf(pose) {

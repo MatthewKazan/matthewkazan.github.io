@@ -1,4 +1,4 @@
-export function drawLoopOverview(canvas, before, after, correction) {
+export function drawLoopOverview(canvas, before, after, loop, correction) {
   const context = canvas.getContext('2d');
   const { width, height } = canvas;
   const positions = [...before, ...after].map((pose) => pose.translation);
@@ -8,15 +8,16 @@ export function drawLoopOverview(canvas, before, after, correction) {
   const maxX = Math.max(...x);
   const minZ = Math.min(...z);
   const maxZ = Math.max(...z);
-  const scale = Math.min((width - 31) / (maxX - minX), (height - 27) / (maxZ - minZ));
+  const scale = Math.min((width - 31) / Math.max(0.01, maxX - minX), (height - 27) / Math.max(0.01, maxZ - minZ));
   const project = ([px, , pz]) => [
     width / 2 + (px - (minX + maxX) / 2) * scale,
     height / 2 + (pz - (minZ + maxZ) / 2) * scale,
   ];
 
-  const start = project(before[0].translation);
-  const driftedEnd = project(before.at(-1).translation);
-  const correctedEnd = project(after.at(-1).translation);
+  const older = project(before[loop.fromFrame].translation);
+  const newer = project(before[loop.toFrame].translation);
+  const correctedOlder = project(after[loop.fromFrame].translation);
+  const correctedNewer = project(after[loop.toFrame].translation);
   context.clearRect(0, 0, width, height);
   context.lineJoin = 'round';
   context.lineCap = 'round';
@@ -44,10 +45,9 @@ export function drawLoopOverview(canvas, before, after, correction) {
   const mint = '#85ebcf';
   line(before.map(({ translation }) => project(translation)), amber, 0.85 - 0.35 * correction, true);
   line(after.map(({ translation }) => project(translation)), mint, 0.48 + 0.52 * correction);
-  line([start, driftedEnd], amber, 0.7, true);
-  marker(driftedEnd, amber, 5);
-  marker(start, '#f2f7ff', 6);
-  if (correction > 0) {
-    marker(driftedEnd.map((value, axis) => value + (correctedEnd[axis] - value) * correction), mint, 3.7);
-  }
+  const matchedA = older.map((value, axis) => value + (correctedOlder[axis] - value) * correction);
+  const matchedB = newer.map((value, axis) => value + (correctedNewer[axis] - value) * correction);
+  line([matchedA, matchedB], '#f2f7ff', 0.75, true);
+  marker(matchedA, '#f2f7ff', 5);
+  marker(matchedB, correction > 0.5 ? mint : amber, 5);
 }

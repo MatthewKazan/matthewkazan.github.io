@@ -7,10 +7,10 @@
   <meta name="description" content="Matthew Kazan’s engineering portfolio. Explore an interactive SLAM map, learned visual pose estimation, warehouse robotics, and hardware automation.">
   <title>Matthew Kazan · Robotics &amp; Perception</title>
   <link rel="preconnect" href="https://huggingface.co" crossorigin>
-  <script type="module" src="./src/preload-depth.js?v=2" async></script>
+  <script type="module" src="./src/preload-depth.js?v=6" async></script>
   <link rel="icon" href="./assets/mk.png" type="image/png">
-  <link rel="stylesheet" href="./styles.css?v=2">
-  <script type="module" src="./src/app.js?v=2"></script>
+  <link rel="stylesheet" href="./styles.css?v=6">
+  <script type="module" src="./src/app.js?v=6"></script>
 </head>
 <body>
   <a href="#main" class="skip">Skip to content</a>
@@ -31,7 +31,7 @@
       <div class="hero-copy">
         <p class="eyebrow"><span class="signal" aria-hidden="true"></span> Robotics &amp; perception</p>
         <h1 id="mapping-title">Mapping a room<br class="wide-break"> with an iPhone.</h1>
-        <p class="intro">My iPhone LiDAR project builds a 3D map as the camera moves. In this browser demo, watch GTSAM correct the map when the camera returns to where it started.</p>
+        <p class="intro">My iPhone LiDAR project builds a 3D map as the camera moves. Watch a simulated camera turn around the room, or map with your own camera.</p>
         <a class="text-link" href="https://github.com/MatthewKazan/iPhone-lidar-slam-playground">Explore the SLAM project</a>
       </div>
 
@@ -58,6 +58,10 @@
             <canvas id="loop-path" width="320" height="166" aria-label="Overhead view of the camera path before and after loop closure"></canvas>
             <div><span class="trace-before">Before</span><span class="trace-after">After</span></div>
           </div>
+          <figure class="sensor-preview" id="sensor-preview" hidden>
+            <figcaption>Simulated camera</figcaption>
+            <canvas id="sensor-image" width="76" height="56" aria-label="Simulated camera view at the current scan"></canvas>
+          </figure>
           <video id="camera-preview" autoplay playsinline muted hidden aria-label="Local camera preview"></video>
           <div id="camera-prompt" class="map-message" hidden>
             <strong>Map with your camera</strong>
@@ -73,8 +77,8 @@
           <div class="playback">
             <button type="button" class="play" id="play" aria-label="Play replay" disabled>Play</button>
             <label class="sr-only" for="frame">Replay frame</label>
-            <input type="range" id="frame" min="1" max="30" value="1" disabled>
-            <output id="frame-count" for="frame">0 / 30</output>
+            <input type="range" id="frame" min="1" max="1" value="1" disabled>
+            <output id="frame-count" for="frame">—</output>
           </div>
         </div>
         <div class="demo-controls loop-comparison" id="loop-comparison" hidden>
@@ -82,7 +86,10 @@
             <button type="button" id="loop-before" aria-pressed="true">Before closure</button>
             <button type="button" id="loop-after" aria-pressed="false">After GTSAM</button>
           </div>
-          <output id="trajectory-gap" aria-live="polite"></output>
+          <div class="loop-metrics">
+            <output id="loop-evidence" aria-label="Verified loop match scores"></output>
+            <span id="loop-shift"></span>
+          </div>
         </div>
         <div class="demo-controls camera-controls" id="camera-controls" hidden>
           <button type="button" class="light-button" id="record-camera">Start recording</button>
@@ -99,7 +106,7 @@
           <span id="camera-frame-count">0 frames</span>
         </div>
         <div class="demo-footer">
-          <span id="demo-description">Simulated RGB-D · GTSAM in WebAssembly</span>
+          <span id="demo-description">Simulated RGB-D · ICP · Scan Context · GTSAM</span>
           <span id="point-count">— points</span>
         </div>
         <p class="camera-feedback" id="camera-feedback" role="status" hidden></p>

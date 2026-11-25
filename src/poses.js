@@ -13,11 +13,16 @@ const loopNoise = {
 
 export { initGtsam };
 
-export function optimizePoses(gtsam, initial, odometry, loops, sigmas = odometryNoise) {
+export function optimizePoses(gtsam, initial, odometry, loops, {
+  sigmas = odometryNoise,
+  prior = initial[0],
+  priorNoise = 0.0001,
+  maxIterations = 65,
+} = {}) {
   return withCleanup((track) => {
     const graph = track(new gtsam.NonlinearFactorGraph());
     const values = track(new gtsam.Values());
-    graph.addPriorPose3(0, initial[0], 0.0001);
+    graph.addPriorPose3(0, prior, priorNoise);
     initial.forEach((pose, index) => {
       values.insertPose3(index, pose);
       if (index > 0) graph.addBetweenPose3(index - 1, index, odometry[index - 1], sigmas);
@@ -25,7 +30,7 @@ export function optimizePoses(gtsam, initial, odometry, loops, sigmas = odometry
     for (const { from, to, transform, noise = loopNoise } of loops) {
       graph.addBetweenPose3(from, to, transform, noise);
     }
-    const result = gtsam.optimize(graph, values, { optimizer: 'lm', maxIterations: 65 });
+    const result = gtsam.optimize(graph, values, { optimizer: 'lm', maxIterations });
     track(result.values);
     return initial.map((_, index) => result.values.atPose3(index));
   });

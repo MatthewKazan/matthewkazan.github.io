@@ -1,6 +1,6 @@
-import { MapViewer } from './viewer.js?v=2';
-import { createCameraRecorder } from './camera.js?v=2';
-import { drawLoopOverview } from './loop-overview.js?v=2';
+import { MapViewer } from './viewer.js?v=6';
+import { createCameraRecorder } from './camera.js?v=6';
+import { drawLoopOverview } from './loop-overview.js?v=6';
 
 const byId = (id) => document.getElementById(id);
 const modes = [...document.querySelectorAll('[data-mode]')];
@@ -10,6 +10,10 @@ const before = byId('loop-before');
 const after = byId('loop-after');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const number = new Intl.NumberFormat();
+const replayDescription = 'Simulated RGB-D · ICP · Scan Context · GTSAM';
+const sensorPreview = byId('sensor-preview');
+const sensorImage = byId('sensor-image');
+const sensorContext = sensorImage.getContext('2d');
 
 let viewer;
 let camera;
@@ -23,6 +27,8 @@ let timer = null;
 let closureDelay = null;
 let transition = null;
 let correction = 0;
+let followProgress = reducedMotion.matches;
+let previewFrame = 0;
 
 function setState(message, solved = false) {
   const label = byId('state-text');
@@ -37,35 +43,39 @@ function describePoints(count) {
 }
 
 function updateReplay() {
-  if (!recording || mode !== 'replay') return;
+  if (!recording?.frames.length || mode !== 'replay') return;
   const length = recording.frames.length;
-  const finished = replayIndex === length;
-  const comparing = finished && !!corrected;
+  const finished = recording.complete && replayIndex === length;
+  const comparing = finished && !!recording.loop;
   const solved = comparing && correction === 1;
-  const adjustment = comparing ? { poses: corrected, amount: correction } : null;
+  const adjustment = finished && corrected ? { poses: corrected, amount: comparing ? correction : 1 } : null;
   describePoints(viewer.setVisible(replayIndex, recording.initial, adjustment));
   frame.value = String(replayIndex);
-  frame.style.setProperty('--progress', (100 * (replayIndex - 1) / (length - 1)) + '%');
-  byId('frame-count').value = replayIndex + ' / ' + length;
+  frame.style.setProperty('--progress', (100 * (replayIndex - 1) / Math.max(1, length - 1)) + '%');
+  byId('frame-count').value = replayIndex + ' / ' + recording.total;
   byId('loop-comparison').hidden = byId('loop-overview').hidden = !comparing;
+  sensorPreview.hidden = comparing;
+  if (!comparing && replayIndex !== previewFrame) {
+    const pixels = recording.frames[replayIndex - 1].preview;
+    sensorContext?.putImageData(new ImageData(pixels, recording.width, recording.height), 0, 0);
+    previewFrame = replayIndex;
+  }
   if (comparing) {
     const choosingAfter = solved || transition !== null;
     before.setAttribute('aria-pressed', String(!choosingAfter));
     after.setAttribute('aria-pressed', String(choosingAfter));
-    drawLoopOverview(byId('loop-path'), recording.initial, corrected, correction);
-    const poses = solved ? corrected : recording.initial;
-    const end = poses.at(-1).translation;
-    const distance = Math.hypot(...poses[0].translation.map((value, axis) => value - end[axis]));
-    const gap = byId('trajectory-gap');
-    const message = transition !== null ? 'Aligning the start and return scans…'
-      : 'Start–end gap ' + (distance < 0.01 ? '< 1 cm' : distance.toFixed(2) + ' m');
-    if (gap.textContent !== message) gap.textContent = message;
-    gap.dataset.closed = String(solved);
+    const loop = recording.loop;
+    drawLoopOverview(byId('loop-path'), recording.initial, corrected, loop, correction);
+    const evidence = byId('loop-evidence');
+    const message = 'Scan Context ' + loop.similarity.toFixed(4) + ' · ICP ' + Math.round(loop.fitness * 100) + '%';
+    if (evidence.textContent !== message) evidence.textContent = message;
+    evidence.title = 'Matched keyframes ' + (loop.from + 1) + ' and ' + (loop.to + 1) + ' at scan ' + loop.detectedAt;
   }
   if (solved) setState('Loop closed', true);
-  else if (finished && replayError) setState(replayError);
-  else if (finished && !corrected) setState('Solving pose graph…');
-  else if (finished) setState(transition !== null ? 'Applying loop closure' : 'Before loop closure');
+  else if (replayError) setState(replayError);
+  else if (finished && !comparing) setState('Replay complete · No loop verified');
+  else if (finished) setState(transition !== null ? 'Applying loop closure' : 'Loop verified');
+  else if (replayIndex === length && !recording.complete && (timer || followProgress)) setState('Registering scans…');
   else setState(timer ? 'Building map' : 'Replay paused');
 
   play.textContent = timer ? 'Pause' : finished ? 'Replay' : 'Play';
@@ -100,7 +110,7 @@ function showCorrection(applyCorrection) {
 
 function finishReplay() {
   setPlaying(false);
-  if (!corrected || mode !== 'replay') return;
+  if (!recording?.loop || mode !== 'replay') return;
   showCorrection(reducedMotion.matches);
   if (!reducedMotion.matches) {
     // Show the drifted return view before moving any samples into alignment.
@@ -111,21 +121,21 @@ function finishReplay() {
 function setPlaying(playing) {
   clearInterval(timer);
   timer = null;
-  if (playing && recording && mode === 'replay') {
+  if (playing && recording?.frames.length && mode === 'replay') {
     cancelClosureAnimation();
     correction = 0;
-    if (replayIndex === recording.frames.length) replayIndex = 1;
+    if (recording.complete && replayIndex === recording.frames.length) replayIndex = 1;
     timer = setInterval(() => {
-      replayIndex++;
-      if (replayIndex >= recording.frames.length) finishReplay();
+      if (replayIndex < recording.frames.length) replayIndex++;
+      if (replayIndex === recording.frames.length && recording.complete) finishReplay();
       else updateReplay();
-    }, 290);
+    }, 62);
   }
   updateReplay();
 }
 
 function loadReplay() {
-  if (!recording) return;
+  if (!recording?.frames.length) return;
   viewer.clear();
   for (const sample of recording.frames) viewer.addFrame(sample);
   if (maps) viewer.setReplayMaps(maps);
@@ -136,38 +146,59 @@ function loadReplay() {
 }
 
 function startReplayWorker() {
-  const worker = new Worker(new URL('./replay-worker.js?v=2', import.meta.url), { type: 'module' });
+  const worker = new Worker(new URL('./replay-worker.js?v=6', import.meta.url), { type: 'module' });
   worker.onmessage = ({ data }) => {
-    if (data.type === 'ready') {
-      recording = data;
-      replayIndex = reducedMotion.matches ? recording.frames.length : 1;
+    if (data.type === 'start') {
+      recording = {
+        frames: [], initial: [], total: data.total, width: data.width, height: data.height, complete: false,
+      };
+      sensorImage.width = data.width;
+      sensorImage.height = data.height;
+      byId('frame-count').value = '0 / ' + data.total;
+    } else if (data.type === 'batch') {
+      const first = recording.frames.length === 0;
+      recording.frames.push(...data.frames);
+      recording.initial.push(...data.poses);
+      if (followProgress) replayIndex = recording.frames.length;
       if (mode === 'replay') {
-        loadReplay();
-        if (!reducedMotion.matches) setPlaying(true);
+        if (first) {
+          loadReplay();
+          if (!followProgress) setPlaying(true);
+        } else {
+          for (const sample of data.frames) viewer.addFrame(sample);
+          frame.max = String(recording.frames.length);
+          updateReplay();
+        }
       }
-    } else if (data.type === 'solved') {
-      if (!data.maps?.length) {
-        replayError = 'Reload to update the replay';
-        updateReplay();
-        worker.terminate();
-        return;
-      }
+    } else if (data.type === 'complete') {
+      recording.complete = true;
+      recording.initial = data.initial;
+      recording.loop = data.loop;
       corrected = data.corrected;
       maps = data.maps;
+      if (data.loop) {
+        const shift = corrected.reduce((largest, { translation }, i) => {
+          const previous = data.initial[i].translation;
+          return Math.max(largest, Math.hypot(...translation.map((coordinate, axis) => coordinate - previous[axis])));
+        }, 0);
+        byId('loop-shift').textContent = 'Largest pose correction ' + Math.round(shift * 1000) + ' mm';
+      }
       if (mode === 'replay') viewer.setReplayMaps(maps);
-      if (recording && replayIndex === recording.frames.length && mode === 'replay') finishReplay();
+      if (replayIndex === recording.frames.length && mode === 'replay') finishReplay();
       else updateReplay();
       worker.terminate();
     } else if (data.type === 'error') {
-      replayError = 'Loop closure unavailable';
+      replayError = 'Replay processing stopped';
       console.error(data.message);
-      updateReplay();
+      setPlaying(false);
+      if (mode === 'replay') setState(replayError);
       worker.terminate();
     }
   };
   worker.onerror = (error) => {
     console.error(error.message);
     replayError = 'Could not load replay';
+    setPlaying(false);
     if (mode === 'replay') setState(replayError);
     worker.terminate();
   };
@@ -184,11 +215,12 @@ function changeMode(next) {
   byId('replay-controls').hidden = mode !== 'replay';
   byId('camera-controls').hidden = mode !== 'camera';
   byId('loop-comparison').hidden = byId('loop-overview').hidden = true;
+  sensorPreview.hidden = true;
   if (mode === 'camera') {
-    byId('demo-description').textContent = 'On-device RGB depth';
+    byId('demo-description').textContent = 'Camera RGB-D · ICP · Scan Context · GTSAM';
     camera.open();
   } else {
-    byId('demo-description').textContent = 'Simulated RGB-D · GTSAM in WebAssembly';
+    byId('demo-description').textContent = replayDescription;
     setState(replayError || 'Loading example');
     loadReplay();
   }
@@ -199,12 +231,16 @@ try {
   camera = createCameraRecorder({ viewer, setState, describePoints });
   startReplayWorker();
   modes.forEach((button) => button.addEventListener('click', () => changeMode(button.dataset.mode)));
-  play.addEventListener('click', () => setPlaying(!timer));
+  play.addEventListener('click', () => {
+    followProgress = false;
+    setPlaying(!timer);
+  });
   frame.addEventListener('input', () => {
+    followProgress = false;
     replayIndex = frame.valueAsNumber;
     cancelClosureAnimation();
     correction = 0;
-    if (replayIndex === recording.frames.length) finishReplay();
+    if (recording.complete && replayIndex === recording.frames.length) finishReplay();
     else setPlaying(false);
   });
   before.addEventListener('click', () => showCorrection(false));

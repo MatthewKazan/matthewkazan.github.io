@@ -25,6 +25,7 @@ export class MapViewer {
     this.controls.maxDistance = 35;
     this.controls.maxPolarAngle = Math.PI * 0.88;
     this.controls.addEventListener('change', () => this.render());
+    this.controls.addEventListener('start', () => { this.customView = true; });
 
     this.points = new THREE.Group();
     this.scene.add(this.points);
@@ -51,6 +52,17 @@ export class MapViewer {
     this.marker.renderOrder = 3;
     this.marker.visible = false;
     this.scene.add(this.marker);
+    const lens = new THREE.Vector3();
+    const corners = [
+      new THREE.Vector3(-0.16, -0.105, -0.32), new THREE.Vector3(0.16, -0.105, -0.32),
+      new THREE.Vector3(0.16, 0.105, -0.32), new THREE.Vector3(-0.16, 0.105, -0.32),
+    ];
+    const frustum = corners.flatMap((corner, i) => [lens, corner, corner, corners[(i + 1) % 4]]);
+    this.heading = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(frustum),
+      new THREE.LineBasicMaterial({ color: 0xffd196, opacity: 0.82, transparent: true, depthTest: false }));
+    this.heading.renderOrder = 3;
+    this.heading.visible = false;
+    this.scene.add(this.heading);
 
     const grid = new THREE.GridHelper(15, 30, 0x253a52, 0x28394f);
     grid.position.y = -0.06;
@@ -132,9 +144,19 @@ export class MapViewer {
     }
     this.context.strokeStyle = this.path.material.color.getStyle();
     this.context.stroke();
+    const cameraPoint = point.clone();
+    if (this.heading.visible) {
+      const forward = new THREE.Vector3(0, 0, -0.32).applyQuaternion(this.heading.quaternion)
+        .add(this.heading.position).applyMatrix4(projection);
+      this.context.beginPath();
+      this.context.moveTo((point.x + 1) * width / 2, (1 - point.y) * height / 2);
+      this.context.lineTo((forward.x + 1) * width / 2, (1 - forward.y) * height / 2);
+      this.context.strokeStyle = '#ffd196';
+      this.context.stroke();
+    }
     this.context.fillStyle = '#ffd196';
     this.context.beginPath();
-    this.context.arc((point.x + 1) * width / 2, (1 - point.y) * height / 2, 3, 0, 2 * Math.PI);
+    this.context.arc((cameraPoint.x + 1) * width / 2, (1 - cameraPoint.y) * height / 2, 3, 0, 2 * Math.PI);
     this.context.fill();
   }
 
@@ -142,6 +164,7 @@ export class MapViewer {
     const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', '+', '=', '-'];
     if (!keys.includes(event.key)) return;
     event.preventDefault();
+    this.customView = true;
     const offset = this.camera.position.clone().sub(this.controls.target);
     const sphere = new THREE.Spherical().setFromVector3(offset);
     if (event.key === 'ArrowLeft') sphere.theta -= 0.13;
@@ -158,8 +181,8 @@ export class MapViewer {
   reset() {
     const distance = this.liveBounds
       ? Math.max(2.8, this.liveBounds.radius * 2.55) * Math.max(1, 1.27 / this.camera.aspect)
-      : 10.8 * Math.max(1, 1.35 / this.camera.aspect);
-    this.controls.target.copy(this.liveBounds?.center ?? target);
+      : Math.max(3.5, (this.replayBounds?.radius ?? 4.5) * 2.13) * Math.max(1, 1.35 / this.camera.aspect);
+    this.controls.target.copy(this.liveBounds?.center ?? this.replayBounds?.center ?? target);
     this.camera.position.copy(cornerView).multiplyScalar(distance).add(this.controls.target);
     this.controls.update();
     this.render();
@@ -173,6 +196,9 @@ export class MapViewer {
     this.material.size = live ? 0.067 : 0.078;
     this.live = live;
     this.liveBounds = null;
+    this.replayBounds = null;
+    this.customView = false;
+    this.grid.position.y = -0.06;
     this.grid.visible = !live;
     this.setVisible(0, []);
     this.reset();
@@ -199,9 +225,10 @@ export class MapViewer {
   addFrame(sample) {
     const frame = this.pointCloud(sample);
     this.frames.push(frame);
-    if (this.live && this.frames.length === 1) {
+    if (this.frames.length === 1) {
       frame.geometry.computeBoundingSphere();
-      this.liveBounds = frame.geometry.boundingSphere.clone();
+      if (this.live) this.liveBounds = frame.geometry.boundingSphere.clone();
+      else this.replayBounds = frame.geometry.boundingSphere.clone();
       this.reset();
     }
   }
@@ -212,6 +239,11 @@ export class MapViewer {
       map.geometry.dispose();
     }
     this.replayMaps = samples.map((sample) => this.pointCloud(sample));
+    const fitted = this.replayMaps.at(-1).geometry;
+    fitted.computeBoundingBox();
+    this.replayBounds = fitted.boundingBox.getBoundingSphere(new THREE.Sphere());
+    this.grid.position.y = fitted.boundingBox.min.y - 0.035;
+    if (!this.customView) this.reset();
   }
 
   setVisible(count, poses, adjustment) {
@@ -244,8 +276,11 @@ export class MapViewer {
     if (merged) points = merged.geometry.getAttribute('position').count;
     this.visiblePoints = points;
     this.marker.visible = path.length > 0;
+    this.heading.visible = this.marker.visible;
     if (this.marker.visible) {
       this.marker.position.copy(path.at(-1));
+      this.heading.position.copy(this.marker.position);
+      this.heading.quaternion.copy(this.frames[path.length - 1].quaternion);
       this.marker.material.color.set(adjustment?.amount === 1 ? 0x85ebcf : 0xffd196);
     }
     this.render();

@@ -1,5 +1,5 @@
-import { depthInputSize } from './depth.js?v=2';
-import { getCameraWorker, modelStatus } from './preload-depth.js?v=2';
+import { depthInputSize } from './depth.js?v=6';
+import { getCameraWorker, modelStatus } from './preload-depth.js?v=6';
 
 export function createCameraRecorder({ viewer, setState, describePoints }) {
   const video = document.getElementById('camera-preview');
@@ -24,6 +24,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
   let measuredRate = 0;
   let frames = 0;
   let loops = 0;
+  let loopSummary = '';
 
   function note(message) {
     if (feedback.textContent !== message) feedback.textContent = message;
@@ -120,14 +121,17 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
         frames++;
         viewer.addFrame(data);
         describePoints(viewer.setVisible(frames, data.poses));
-        if (data.loops > loops) note('GTSAM closed a loop and corrected the map.');
-        else if (frames === 1) note('Move slowly and keep some of the previous view in sight.');
-        else note('');
+        if (data.loops > loops) {
+          loopSummary = 'Scan Context ' + data.match.similarity.toFixed(3) + ' · ICP ' +
+            Math.round(data.match.fitness * 100) + '% · GTSAM corrected the map.';
+        }
+        note(loopSummary || (frames === 1 ? 'Turn slowly and keep some of the previous view in sight.' : ''));
         loops = data.loops;
       } else if (data.type === 'skipped') {
         note(data.message);
       }
-      setState(loops ? 'Recording · Loop closed' : 'Recording', loops > 0);
+      if (data.tracking === 'lost') setState('Tracking lost');
+      else setState(loops ? 'Recording · Loop closed' : 'Recording', loops > 0);
     }
     showCount();
     scheduleFrame();
@@ -169,6 +173,7 @@ export function createCameraRecorder({ viewer, setState, describePoints }) {
       await video.play();
       if (id !== scanId) return;
       frames = loops = measuredRate = 0;
+      loopSummary = '';
       lastCapture = -Infinity;
       viewer.clear(true);
       describePoints(0);

@@ -59,6 +59,14 @@ box(-2.83, 0.77, 1.68, 1.1, 0.065, 0.73, mint);
 box(2.86, 0.23, 1.72, 0.81, 0.46, 0.75, [179, 143, 234], 'drawers');
 box(2.86, 0.62, 1.72, 0.73, 0.32, 0.67, [110, 208, 212], 'drawers');
 box(2.55, 0.01, 0.84, 1.25, 0.019, 2.65, [117, 163, 208], 'rug');
+box(3.94, 0.49, -0.28, 0.37, 0.98, 2.5, [100, 155, 190], 'drawers');
+box(0.85, 0.39, 2.91, 2.35, 0.78, 0.42, [111, 172, 188], 'drawers');
+box(4.14, 0.96, 0, 0.12, 1.92, 6.45, [133, 150, 196], 'wall');
+box(0, 0.87, 3.19, 8.35, 1.74, 0.12, [106, 147, 195], 'wall');
+box(-1.18, 0.68, 2.94, 0.87, 1.36, 0.41, [138, 184, 216], 'drawers');
+box(3.79, 1.34, 0.63, 0.59, 2.68, 1.07, [147, 166, 213], 'drawers');
+box(2.01, 0.57, 2.81, 0.54, 1.14, 0.75, [194, 154, 127]);
+box(-3.23, 0.65, 2.41, 0.71, 1.3, 1.04, [143, 210, 189], 'drawers');
 
 function rangeForRay(box, origin, reverseDirection, nearest) {
   let enter = 0.04;
@@ -89,22 +97,26 @@ function colorAt(surface, x, y, z, column, row, frame) {
   return surface.color.map((value) => Math.min(255, Math.round(value * shade)));
 }
 
-function cameraPose(angle, drift = 0) {
-  const x = 2.88 * Math.sin(angle);
-  const z = 2.11 * Math.cos(angle);
-  const yaw = Math.atan2(x + 0.25, z + 0.25);
+function cameraPose(angle) {
+  // The sensor makes one full turn while moving around the workbench.
+  const x = 0.83 * Math.sin(angle);
+  const z = 0.76 + 0.59 * Math.cos(angle);
   return {
-    yaw,
-    rotation: { w: Math.cos(yaw / 2), x: 0, y: Math.sin(yaw / 2), z: 0 },
-    translation: [x + 1.36 * drift, 1.48 + 0.18 * drift, z - 0.92 * drift],
+    yaw: angle,
+    translation: [x, 1.48, z],
   };
 }
 
+export const replayWidth = 76;
+export const replayHeight = 56;
+
 function sampleDepth(camera, index) {
-  const width = 94;
-  const height = 68;
+  const width = replayWidth;
+  const height = replayHeight;
+  const roomScale = 0.53;
   const points = new Float32Array(width * height * 3);
   const colors = new Uint8Array(points.length);
+  const preview = new Uint8ClampedArray(width * height * 4);
   const c = Math.cos(camera.yaw);
   const s = Math.sin(camera.yaw);
   const origin = camera.translation;
@@ -112,8 +124,12 @@ function sampleDepth(camera, index) {
 
   for (let row = 0; row < height; row++) {
     for (let column = 0; column < width; column++) {
-      const localX = ((column + 0.5) / width - 0.5) * 1.99;
-      const localY = (0.5 - (row + 0.5) / height) * 1.49 - 0.22;
+      // Sample within each pixel to avoid a perfectly repeating ray lattice.
+      const hash = Math.imul(column + index * 79, 3266489917) ^ Math.imul(row + 1, 1597334677);
+      const jitterX = ((hash ^ (hash >>> 11)) & 1023) / 1024 - 0.5;
+      const jitterY = ((Math.imul(hash, 2246822519) >>> 14) & 1023) / 1024 - 0.5;
+      const localX = ((column + 0.5 + jitterX) / width - 0.5) * 1.99;
+      const localY = (0.5 - (row + 0.5 + jitterY) / height) * 1.49 - 0.22;
       const worldX = c * localX - s;
       const worldZ = -s * localX - c;
       const reverse = [1 / (worldX || 1e-10), 1 / (localY || 1e-10), 1 / (worldZ || 1e-10)];
@@ -127,30 +143,32 @@ function sampleDepth(camera, index) {
         }
       }
       if (!surface) continue;
-      points[used] = localX * nearest;
-      points[used + 1] = localY * nearest;
-      points[used + 2] = -nearest;
-      colors.set(colorAt(surface, origin[0] + worldX * nearest, origin[1] + localY * nearest,
-        origin[2] + worldZ * nearest, column, row, index), used);
+      const noise = ((Math.imul(column + 19 * index, 374761393) ^ Math.imul(row + 1, 668265263)) >>> 0)
+        / 4294967295 - 0.5;
+      const depth = Math.round((nearest + noise * 0.009) * 1000) / 1000;
+      // Camera coordinates match the iPhone capture: X right, Y down, Z forward.
+      points[used] = localX * depth * roomScale;
+      points[used + 1] = -localY * depth * roomScale;
+      points[used + 2] = depth * roomScale;
+      const rgb = colorAt(surface, origin[0] + worldX * nearest, origin[1] + localY * nearest,
+        origin[2] + worldZ * nearest, column, row, index);
+      colors.set(rgb, used);
+      const pixel = (row * width + column) * 4;
+      preview.set(rgb, pixel);
+      preview[pixel + 3] = 255;
       used += 3;
     }
   }
-  return { points: points.subarray(0, used), colors: colors.subarray(0, used) };
+  return { points: points.subarray(0, used), colors: colors.subarray(0, used), preview };
 }
 
-export const replayLength = 30;
+export const replayLength = 216;
+export const replayPointThreshold = 18_000;
 
-export function makeReplay() {
-  const frames = [];
-  const ideal = [];
-  const initial = [];
+export function* roomScans() {
   for (let i = 0; i < replayLength; i++) {
     const fraction = i / (replayLength - 1);
-    const angle = 0.37 + fraction * Math.PI * 2;
-    const camera = cameraPose(angle);
-    ideal.push(camera);
-    initial.push(cameraPose(angle, fraction));
-    frames.push(sampleDepth(camera, i));
+    const angle = 0.37 + fraction * Math.PI * 2.16;
+    yield sampleDepth(cameraPose(angle), i);
   }
-  return { frames, ideal, initial };
 }

@@ -4,7 +4,7 @@ export let cameraWorker;
 export function getCameraWorker() {
   if (cameraWorker) return cameraWorker;
   try {
-    const worker = new Worker(new URL('./camera-worker.js?v=2', import.meta.url), { type: 'module' });
+    const worker = new Worker(new URL('./camera-worker.js?v=6', import.meta.url), { type: 'module' });
     worker.addEventListener('message', ({ data }) => {
       if (data.type === 'model-status') modelStatus = data.message;
     });
