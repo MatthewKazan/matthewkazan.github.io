@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111722">
+  <meta name="description" content="I prototyped wearable devices that register épée touches and a Swift app that displays and edits the score.">
+  <title>Wireless Fencing Scoring · Matthew Kazan</title>
+  <link rel="icon" href="../../assets/mk.png" type="image/png">
+  <link rel="stylesheet" href="../../styles.css?v=9">
+  <link rel="stylesheet" href="../../portfolio.css?v=1">
+</head>
+<body>
+  <a href="#main" class="skip">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap header-inner portfolio-header">
+      <a class="identity" href="../../" aria-label="Matthew Kazan, home"><b aria-hidden="true">MK</b> <span>Matthew Kazan</span></a>
+      <nav aria-label="Main navigation">
+        <a href="../../#mapping">Map</a>
+        <a href="../../#work">Projects</a>
+        <a href="../../#experience">Experience</a>
+        <a href="../../#background">Background</a>
+      </nav>
+    </div>
+  </header>
+  <main id="main" class="wrap case-page">
+    <a class="case-back text-link" href="../../#work">All projects</a>
+    <article>
+      <header class="case-hero">
+        <div>
+          <p class="case-kicker">Embedded systems · iOS</p>
+          <h1>Wireless Fencing Scoring</h1>
+          <p class="case-meta">Personal project · December 2020</p>
+          <p class="case-lead">I prototyped wearable devices that register épée touches and a Swift app that displays and edits the score.</p>
+          <div class="case-links"><a class="text-link" href="https://github.com/MatthewKazan/Bluetooth-Fencing-Scoring-System">Hardware and firmware repository</a></div>
+        </div>
+        <figure class="case-visual">
+          <a href="../../assets/fencing-circuit.webp" aria-label="Open full-size image">
+            <img src="../../assets/fencing-circuit.webp" width="960" height="624" alt="The ESP32 scoring circuit with the body-cord inputs, buzzer, and LED.">
+          </a>
+          <figcaption>Scoring circuit with the épée input and audible and visual touch indicators.</figcaption>
+        </figure>
+      </header>
+      <section class="case-section">
+        <h2>Touch detection hardware</h2>
+        <p>Each device connects to the fencer’s standard body cord. I designed the sensing circuit, wrote microcontroller firmware, and modeled a 3D-printed enclosure.</p>
+      </section>
+      <section class="case-section">
+        <h2>Scorekeeping interface</h2>
+        <p>The Swift app displays and edits scores through Firebase Realtime Database. Bringing the hardware and app together required debugging the sensor input, timing, and communication paths.</p>
+      </section>
+    </article>
+  </main>
+  <footer>
+    <div class="wrap footer-inner">
+      <b>Matthew Kazan</b>
+      <div><a href="https://github.com/MatthewKazan">GitHub</a><a href="https://www.linkedin.com/in/matthew-kazan">LinkedIn</a></div>
+    </div>
+  </footer>
+</body>
+</html>

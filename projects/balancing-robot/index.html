@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111722">
+  <meta name="description" content="I modeled a two-wheel inverted-pendulum robot and trained a Proximal Policy Optimization agent to balance it in simulation.">
+  <title>Self-Balancing Robot · Matthew Kazan</title>
+  <link rel="icon" href="../../assets/mk.png" type="image/png">
+  <link rel="stylesheet" href="../../styles.css?v=9">
+  <link rel="stylesheet" href="../../portfolio.css?v=1">
+</head>
+<body>
+  <a href="#main" class="skip">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap header-inner portfolio-header">
+      <a class="identity" href="../../" aria-label="Matthew Kazan, home"><b aria-hidden="true">MK</b> <span>Matthew Kazan</span></a>
+      <nav aria-label="Main navigation">
+        <a href="../../#mapping">Map</a>
+        <a href="../../#work">Projects</a>
+        <a href="../../#experience">Experience</a>
+        <a href="../../#background">Background</a>
+      </nav>
+    </div>
+  </header>
+  <main id="main" class="wrap case-page">
+    <a class="case-back text-link" href="../../#work">All projects</a>
+    <article>
+      <header class="case-hero">
+        <div>
+          <p class="case-kicker">Reinforcement learning · Robot simulation</p>
+          <h1>Self-Balancing Robot</h1>
+          <p class="case-meta">Northeastern University · April 2024</p>
+          <p class="case-lead">I modeled a two-wheel inverted-pendulum robot and trained a Proximal Policy Optimization agent to balance it in simulation.</p>
+        </div>
+        <figure class="case-visual">
+          <a href="../../assets/ppo-robot.webp" aria-label="Open full-size image">
+            <img src="../../assets/ppo-robot.webp" width="1050" height="680" alt="CAD rendering of the rigid robot body and two drive wheels.">
+          </a>
+          <figcaption>Onshape model exported as a URDF for the PyBullet simulation.</figcaption>
+        </figure>
+      </header>
+      <section class="case-section">
+        <h2>From CAD to a training environment</h2>
+        <p>I used Onshape and PyBullet to define the robot and its dynamics. A Gym interface exposes orientation and velocity observations and converts the policy’s output to wheel commands.</p>
+      </section>
+      <section class="case-section">
+        <h2>Policy training and evaluation</h2>
+        <p>I trained PPO with TensorFlow Agents and compared it with a neuroevolution baseline. The experiments measured balance duration, drift, and control smoothness while testing reward and simulation settings.</p>
+      </section>
+    </article>
+  </main>
+  <footer>
+    <div class="wrap footer-inner">
+      <b>Matthew Kazan</b>
+      <div><a href="https://github.com/MatthewKazan">GitHub</a><a href="https://www.linkedin.com/in/matthew-kazan">LinkedIn</a></div>
+    </div>
+  </footer>
+</body>
+</html>

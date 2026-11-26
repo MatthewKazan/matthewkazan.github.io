@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111722">
+  <meta name="description" content="I collected IMU and GPS measurements with ROS 2 and compared how different filtering choices affected heading and velocity estimates.">
+  <title>Multi-Sensor Data Integration · Matthew Kazan</title>
+  <link rel="icon" href="../../assets/mk.png" type="image/png">
+  <link rel="stylesheet" href="../../styles.css?v=9">
+  <link rel="stylesheet" href="../../portfolio.css?v=1">
+</head>
+<body>
+  <a href="#main" class="skip">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap header-inner portfolio-header">
+      <a class="identity" href="../../" aria-label="Matthew Kazan, home"><b aria-hidden="true">MK</b> <span>Matthew Kazan</span></a>
+      <nav aria-label="Main navigation">
+        <a href="../../#mapping">Map</a>
+        <a href="../../#work">Projects</a>
+        <a href="../../#experience">Experience</a>
+        <a href="../../#background">Background</a>
+      </nav>
+    </div>
+  </header>
+  <main id="main" class="wrap case-page">
+    <a class="case-back text-link" href="../../#work">All projects</a>
+    <article>
+      <header class="case-hero">
+        <div>
+          <p class="case-kicker">Robotics sensing · ROS 2</p>
+          <h1>Multi-Sensor Data Integration</h1>
+          <p class="case-meta">Northeastern University · March 2025</p>
+          <p class="case-lead">I collected IMU and GPS measurements with ROS 2 and compared how different filtering choices affected heading and velocity estimates.</p>
+        </div>
+        <figure class="case-visual">
+          <a href="../../assets/sensor-fusion-yaw.webp" aria-label="Open full-size image">
+            <img src="../../assets/sensor-fusion-yaw.webp" width="862" height="468" alt="A plot of four heading estimates over time, including fused yaw.">
+          </a>
+          <figcaption>Yaw traces from the recorded driving test. The complementary filter combines gyroscope and magnetometer measurements.</figcaption>
+        </figure>
+      </header>
+      <section class="case-section">
+        <h2>Heading from multiple sensors</h2>
+        <p>I calibrated magnetometer readings and combined their long-term heading with short-term gyroscope motion using a complementary filter. ROS 2 bags preserved the sensor streams for repeatable analysis.</p>
+      </section>
+      <section class="case-section">
+        <h2>Velocity and bias</h2>
+        <p>I compared velocity inferred from IMU acceleration with GPS measurements, then evaluated filtering and bias correction to reduce inertial drift.</p>
+      </section>
+    </article>
+  </main>
+  <footer>
+    <div class="wrap footer-inner">
+      <b>Matthew Kazan</b>
+      <div><a href="https://github.com/MatthewKazan">GitHub</a><a href="https://www.linkedin.com/in/matthew-kazan">LinkedIn</a></div>
+    </div>
+  </footer>
+</body>
+</html>

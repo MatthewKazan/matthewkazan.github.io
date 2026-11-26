@@ -1,0 +1,226 @@
+.camera-depth-note {
+  display: grid;
+  gap: 4px;
+  padding: 16px clamp(16px, 2.4vw, 26px);
+  background: #211f24;
+  border: 1px solid #5c4b37;
+  border-inline-start: 4px solid #edbc76;
+  border-radius: 9px;
+  color: #d4ccca;
+}
+
+.camera-depth-note strong {
+  color: #ffe1ad;
+  font-size: clamp(1.05rem, 1.7vw, 1.2rem);
+}
+
+.portfolio-section {
+  padding-block: clamp(46px, 6vw, 86px);
+}
+
+.portfolio-section + .portfolio-section {
+  border-top: 1px solid var(--line);
+}
+
+.portfolio-section h2,
+.case-section h2 {
+  font-size: clamp(1.9rem, 3.6vw, 3.55rem);
+  letter-spacing: -0.06em;
+  margin-bottom: clamp(18px, 3vw, 32px);
+}
+
+.portfolio-feature,
+.portfolio-card {
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  overflow: hidden;
+  text-decoration: none;
+}
+
+.portfolio-feature:hover,
+.portfolio-card:hover,
+.background-links a:hover { border-color: #80a3d6; }
+
+.portfolio-feature {
+  display: grid;
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.2fr);
+  align-items: center;
+  margin-bottom: clamp(16px, 2.6vw, 28px);
+}
+
+.portfolio-feature > div { padding: clamp(22px, 4vw, 50px); }
+.portfolio-feature img {
+  width: 100%;
+  height: 100%;
+  min-height: 250px;
+  object-fit: cover;
+  object-position: center;
+}
+
+.portfolio-feature h3 {
+  margin: 8px 0 14px;
+  font-size: clamp(2.3rem, 4.4vw, 4.1rem);
+  text-wrap: balance;
+}
+
+.portfolio-feature p:not(.case-kicker),
+.portfolio-card p { color: var(--muted); }
+.portfolio-feature .text-link { display: inline-block; margin-top: 17px; }
+
+.portfolio-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(14px, 2vw, 22px);
+}
+
+.portfolio-grid.roles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.portfolio-card { display: grid; grid-template-rows: auto 1fr; }
+.portfolio-card img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-bottom: 1px solid var(--line);
+}
+
+.portfolio-card img.contain { object-fit: contain; background: #fff; }
+.portfolio-card > div { padding: 16px 18px 20px; }
+.portfolio-card .case-kicker { font-size: 0.875rem; color: var(--accent); }
+.portfolio-card h3 { font-size: clamp(1.25rem, 2.1vw, 1.85rem); margin-block: 2px 8px; }
+.portfolio-card p { font-size: 1rem; line-height: 1.5; }
+
+.background-links {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.background-links a {
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  text-decoration: none;
+  font-weight: 650;
+}
+
+.case-page {
+  min-height: calc(100vh - 168px);
+  padding-block: clamp(36px, 5vw, 72px) clamp(52px, 7vw, 95px);
+}
+
+.case-back { display: inline-block; margin-bottom: 23px; }
+.case-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.2fr);
+  gap: clamp(22px, 5vw, 65px);
+  align-items: center;
+}
+
+.case-kicker {
+  color: var(--accent);
+  font: 620 0.875rem/1.45 var(--mono);
+}
+
+.case-page h1 {
+  margin: 8px 0 14px;
+  max-width: 18ch;
+  font-size: clamp(2.55rem, 5.15vw, 5.2rem);
+  text-wrap: balance;
+}
+
+.case-lead {
+  color: var(--muted);
+  font-size: clamp(1.06rem, 1.55vw, 1.27rem);
+  max-width: 53ch;
+}
+
+.case-meta {
+  color: var(--muted);
+  margin: 0 0 11px;
+  font-size: 0.9rem;
+}
+
+.case-links { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; }
+.case-visual img, .case-visual video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--night);
+}
+
+.case-visual figcaption { font-size: 0.88rem; }
+.case-section {
+  border-top: 1px solid var(--line);
+  margin-top: clamp(30px, 5vw, 63px);
+  padding-top: clamp(24px, 4vw, 42px);
+}
+
+.case-section h2 { font-size: clamp(1.75rem, 3.25vw, 2.95rem); margin-bottom: 14px; }
+.case-section h3 { font-size: 1.25rem; margin-bottom: 6px; }
+.case-section p { color: var(--muted); max-width: 76ch; }
+.case-section p + p { margin-top: 9px; }
+.case-columns, .case-benchmarks, .case-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(14px, 3vw, 30px);
+}
+
+.case-columns > div {
+  padding: clamp(14px, 2vw, 22px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.case-figures { align-items: start; margin-top: 22px; }
+.case-section .case-visual.single { max-width: 54rem; margin-top: 18px; }
+.case-benchmarks { margin: 17px 0 0; }
+.case-benchmarks > div { border-top: 2px solid #567bab; padding-top: 11px; }
+.case-benchmarks dt {
+  font-size: clamp(1.85rem, 3vw, 3rem);
+  font-weight: 730;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+.case-benchmarks dd { margin: 8px 0 0; color: var(--muted); }
+.case-equations {
+  display: grid;
+  gap: 7px;
+  margin-top: 15px;
+  margin-bottom: 13px;
+  padding: 13px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--night);
+}
+
+.case-equations code { font: 1rem/1.6 var(--mono); overflow-wrap: anywhere; color: #d8e6ff; }
+.case-prose { max-width: 59rem; }
+.case-prose .case-section { margin-top: 32px; padding-top: 23px; }
+.case-list { margin: 14px 0 0; padding-inline-start: 1.25em; color: var(--muted); }
+.case-list li + li { margin-top: 8px; }
+.case-list strong { color: var(--ink); }
+
+@media (max-width: 980px) {
+  .portfolio-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .portfolio-feature, .case-hero { grid-template-columns: 1fr; }
+  .portfolio-feature img { max-height: 340px; min-height: 0; }
+  .portfolio-grid.roles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .background-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .case-page h1 { max-width: 19ch; }
+}
+
+@media (max-width: 520px) {
+  .portfolio-header { flex-wrap: wrap; padding-block: 10px; gap: 8px; }
+  .portfolio-header nav { flex-wrap: wrap; font-size: 0.875rem; }
+  .portfolio-grid, .portfolio-grid.roles,
+  .case-columns, .case-figures { grid-template-columns: 1fr; }
+  .portfolio-card img { max-height: 245px; }
+  .footer-inner div { flex-wrap: wrap; justify-content: flex-end; gap: 8px 14px; }
+}

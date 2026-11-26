@@ -30,18 +30,19 @@
   <script type="module" src="./src/preload-depth.js?v=13" async></script>
   <link rel="icon" href="./assets/mk.png" type="image/png">
   <link rel="stylesheet" href="./styles.css?v=9">
+  <link rel="stylesheet" href="./portfolio.css?v=1">
   <script type="module" src="./src/app.js?v=17"></script>
 </head>
 <body>
   <a href="#main" class="skip">Skip to content</a>
   <header class="site-header">
-    <div class="wrap header-inner">
+    <div class="wrap header-inner portfolio-header">
       <a class="identity" href="./" aria-label="Matthew Kazan, home"><b aria-hidden="true">MK</b> <span>Matthew Kazan</span></a>
       <nav aria-label="Main navigation">
         <a href="#mapping">Map</a>
         <a href="#work">Projects</a>
         <a href="#experience">Experience</a>
-        <a class="nav-github" href="https://github.com/MatthewKazan">GitHub</a>
+        <a href="#background">Background</a>
       </nav>
     </div>
   </header>
@@ -136,74 +137,69 @@
       </div>
     </section>
 
-    <section class="wrap map-notes" aria-label="SLAM project details">
-      <p><b>Depth to map.</b> The original system streamed iPhone LiDAR depth into ROS 2, registered point clouds, and used a factor graph to refine camera poses.</p>
-      <p><b>Camera mode is a rough approximation.</b> Browsers cannot read the iPhone’s LiDAR, so camera mode estimates depth from each image with the MoGe-2 network and tracks the camera with the phone’s motion sensors and image features. Estimated depth is far noisier than LiDAR, so the map is much rougher than the original system’s.</p>
-    </section>
+    <aside class="wrap camera-depth-note" aria-label="Camera mode limitation">
+      <strong>Camera mode builds a rough map from estimated depth.</strong>
+      <p>The browser receives RGB video only. The native iPhone app reads real LiDAR depth for a more accurate reconstruction.</p>
+    </aside>
 
-    <section class="work" id="work" aria-labelledby="work-title">
-      <div class="wrap">
-        <div class="section-heading">
-          <h2 id="work-title">Selected work</h2>
-          <span aria-hidden="true"></span>
+    <section class="wrap portfolio-section" id="work" aria-labelledby="work-title">
+      <h2 id="work-title">Projects</h2>
+      <a class="portfolio-feature" href="./projects/learned-visual-pose/">
+        <div>
+          <p class="case-kicker">Computer vision · Machine learning</p>
+          <h3>Learned Visual Pose</h3>
+          <p>I derived and implemented pose estimation in C++/Eigen, rendered RGB-D training data, and trained image descriptors. I’m now developing Transformers for pose graphs.</p>
+          <span class="text-link">Explore the project</span>
         </div>
-        <article class="vision">
-          <div class="vision-copy">
-            <p class="eyebrow">Computer vision &amp; SLAM</p>
-            <h3>Learned Visual Pose</h3>
-            <p>I built a C++/Eigen pose pipeline and trained a Transformer to refine SLAM pose graphs. I also trained a convolutional descriptor for matching image features across views.</p>
-            <dl class="metrics">
-              <div><dt>48%</dt><dd>lower mean trajectory error than robust Gauss–Newton on 100 validation graphs with injected faults</dd></div>
-              <div><dt>70.7%</dt><dd>of CNN matches within 8 px, compared with 58.2% for SIFT on one held-out TartanAir sequence</dd></div>
-            </dl>
-            <a class="text-link" href="https://github.com/MatthewKazan/learned_visual_pose">View project</a>
-          </div>
-          <figure class="vision-figure">
-            <video controls playsinline preload="metadata" width="1280" height="776" poster="./assets/learned-visual-pose-poster.webp" aria-label="Learned Visual Pose mapping demo">
-              <source src="./assets/learned-visual-pose.mp4" type="video/mp4">
-              <a href="./assets/learned-visual-pose.mp4">Watch the Learned Visual Pose demo</a>
-            </video>
-            <figcaption>Learned Visual Pose in Rerun. Watch the RGB-D views and reconstructed point cloud update during a scan.</figcaption>
-          </figure>
-        </article>
-        <details class="benchmark">
-          <summary>See the feature-matching and trajectory benchmarks</summary>
-          <div class="benchmark-figures">
-            <figure>
-              <a href="./assets/vision-matching.webp" aria-label="Open full-size SIFT and CNN feature-matching comparison">
-                <img src="./assets/vision-matching.webp" loading="lazy" width="1450" height="1009" alt="SIFT and learned CNN correspondence lines on the same pair of TartanAir frames, with similarity and descriptor maps.">
-              </a>
-              <figcaption>Feature matching on <a href="https://theairlab.org/tartanair-dataset/#term-of-use">TartanAir</a> frames by Wang et al. · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>
-            </figure>
-            <figure>
-              <a href="./assets/vision-trajectory.webp" aria-label="Open full-size trajectory benchmark">
-                <img loading="lazy" src="./assets/vision-trajectory.webp" width="1200" height="361" alt="Estimated and reference paths on a TartanAir sequence, with plots of pose error over time.">
-              </a>
-              <figcaption>Classical pose-estimation baseline on <a href="https://theairlab.org/tartanair-dataset/#term-of-use">TartanAir</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>
-            </figure>
-          </div>
-        </details>
+        <img src="./assets/learned-visual-pose-poster.webp" width="1280" height="776" loading="lazy" alt="Rerun view of the visual pose pipeline with a colored reconstruction, camera views, and depth images.">
+      </a>
 
-        <article class="embedded">
-          <a href="./assets/fencing-circuit.webp" aria-label="Open the full wireless fencing circuit diagram"><img src="./assets/fencing-circuit.webp" width="960" height="624" loading="lazy" alt="Circuit diagram showing an ESP32, the épée connection, and the buzzer and indicator LED."></a>
-          <div>
-            <p class="eyebrow">Embedded systems</p>
-            <h3>Wireless fencing scoring</h3>
-            <p>I prototyped a portable épée scoring system with ESP32 firmware, an LED and buzzer circuit, and a 3D-printed enclosure. The two units communicate using ESP-NOW.</p>
-            <a class="text-link" href="https://github.com/MatthewKazan/Bluetooth-Fencing-Scoring-System">View circuit and firmware</a>
-          </div>
-        </article>
+      <div class="portfolio-grid">
+        <a class="portfolio-card" href="./projects/iphone-lidar/">
+          <img src="./assets/iphone-lidar-map.webp" width="1280" height="718" loading="lazy" alt="A room-scale point cloud captured using the native iPhone LiDAR pipeline.">
+          <div><h3>iPhone LiDAR SLAM</h3><p>A Swift scanner and a ROS 2 pipeline that register measured LiDAR scans into a 3D map.</p></div>
+        </a>
+        <a class="portfolio-card" href="./projects/sensor-fusion/">
+          <img class="contain" src="./assets/sensor-fusion-yaw.webp" width="862" height="468" loading="lazy" alt="Yaw traces from the gyroscope, magnetometer, IMU, and complementary filter during a recorded drive.">
+          <div><h3>ROS 2 Sensor Fusion</h3><p>Fused gyroscope and magnetometer signals for heading and checked inertial velocity against GPS.</p></div>
+        </a>
+        <a class="portfolio-card" href="./projects/balancing-robot/">
+          <img class="contain" src="./assets/ppo-robot.webp" width="1050" height="680" loading="lazy" alt="CAD model of the two-wheeled robot used for balance experiments.">
+          <div><h3>Self-Balancing Robot</h3><p>Modeled a two-wheel robot in CAD and trained a PPO controller to balance it in simulation.</p></div>
+        </a>
+        <a class="portfolio-card" href="./projects/fencing/">
+          <img class="contain" src="./assets/fencing-circuit.webp" width="960" height="624" loading="lazy" alt="Circuit diagram of the ESP32, épée connection, buzzer, and indicator LED.">
+          <div><h3>Wireless Fencing Scoring</h3><p>Prototyped wearable épée touch detectors and a Swift scorekeeping app.</p></div>
+        </a>
       </div>
     </section>
-    <section class="wrap experience-index" id="experience" aria-labelledby="experience-title">
-      <div class="section-heading">
-        <h2 id="experience-title">Experience</h2>
-        <span aria-hidden="true"></span>
+
+    <section class="wrap portfolio-section" id="experience" aria-labelledby="experience-title">
+      <h2 id="experience-title">Experience</h2>
+      <div class="portfolio-grid roles">
+        <a class="portfolio-card" href="./work/locus/">
+          <img src="./assets/locus-array.webp" width="800" height="800" loading="lazy" alt="Locus Array mobile manipulation robot in a warehouse aisle.">
+          <div><p class="case-kicker">Robotics Test Engineer</p><h3>Locus Robotics</h3><p>Built motion-capture ground truth and simulation tooling to measure localization and positioning accuracy.</p></div>
+        </a>
+        <a class="portfolio-card" href="./work/twelve/">
+          <img src="./assets/twelve-test-cell.webp" width="664" height="443" loading="lazy" alt="Twelve team member holding a CO₂ electrolysis test cell in a lab.">
+          <div><p class="case-kicker">Hardware Automation Co-op</p><h3>Twelve</h3><p>Built hardware-in-the-loop tests, instrument software, and recovery tools for CO₂ electrolysis test stands.</p></div>
+        </a>
+        <a class="portfolio-card" href="./work/kythera/">
+          <img src="./assets/kythera-satcom.webp" width="1200" height="800" loading="lazy" alt="Kythera illustration of a satellite communications network above the Earth.">
+          <div><p class="case-kicker">Software Engineering Co-op</p><h3>Kythera Space Solutions</h3><p>Developed REST APIs, C++ libraries, and integration tooling for satellite communications optimization.</p></div>
+        </a>
       </div>
-      <div class="experience-links">
-        <a href="./work/locus/"><strong>Locus Robotics</strong><span>Robotics Test Engineer</span></a>
-        <a href="./work/twelve/"><strong>Twelve</strong><span>Hardware Automation Co-op</span></a>
-      </div>
+    </section>
+
+    <section class="wrap portfolio-section" id="background" aria-labelledby="background-title">
+      <h2 id="background-title">Background</h2>
+      <nav class="background-links" aria-label="Background">
+        <a href="./about/">About me</a>
+        <a href="./education/">Education</a>
+        <a href="./skills/">Skills</a>
+        <a href="./interests/">Interests</a>
+      </nav>
     </section>
   </main>
   <footer>
