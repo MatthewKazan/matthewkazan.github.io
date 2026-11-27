@@ -6,6 +6,20 @@
 
 Run `npm run dev` or `python3 -m http.server 53681 --bind 127.0.0.1` from the root and visit [localhost:53681](http://localhost:53681). GitHub Pages serves the same static files from the root of `main`.
 
+## Edit the portfolio
+
+The copy is plain HTML. Change the text inside the heading and paragraph tags in the relevant file, then refresh the local preview.
+
+| Copy | File |
+| --- | --- |
+| Homepage summaries and order | [`index.html`](index.html), under the **Projects**, **Experience**, and **Background** comments below the demo |
+| Project detail pages | `projects/<project>/index.html`, for example [Learned Visual Pose](projects/learned-visual-pose/index.html) |
+| Work experience pages | `work/<company>/index.html`, for example [Locus Robotics](work/locus/index.html) |
+| Background pages | [About](about/index.html), [Education](education/index.html), [Skills](skills/index.html), [Interests](interests/index.html) |
+| Portfolio page layout | [`portfolio.css`](portfolio.css) |
+
+Homepage summaries and detail pages are edited separately. Each detail page keeps its copy inside one `article` with a heading for each topic. The browser tab title and search description are at the top of the file.
+
 ## Mapping demo
 
 - **Replay** feeds 216 simulated depth scans from a full turn around the room to a browser port of the original ICP and Scan Context pipeline. The worker registers each scan against the local map with point-to-point ICP at a 2 cm voxel size. It assembles submaps, ranks older matches with the original 60 × 20 Scan Context descriptor at a 0.90 cosine threshold, and verifies candidates with two passes of point-to-plane ICP. Verified matches become robust Pose3 factors in GTSAM 4.3.0 WebAssembly. The replay uses an 18,000-voxel submap threshold for the simulated scans. The original recorded phone scans use 75,000. The simulator uses camera poses to produce depth and the sensor preview. The registration and loop detector receive the resulting point clouds.

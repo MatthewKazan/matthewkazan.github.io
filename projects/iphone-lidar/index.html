@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111722">
-  <meta name="description" content="I built a Swift app that streams measured iPhone LiDAR points to ROS 2. The backend estimates the phone’s motion and adds each registered scan to a global 3D map.">
+  <meta name="description" content="Matthew Kazan’s iPhone LiDAR project streams measured 3D points to a ROS 2 mapping pipeline with scan registration, loop closure, and GTSAM optimization.">
   <title>iPhone LiDAR SLAM · Matthew Kazan</title>
   <link rel="icon" href="../../assets/mk.png" type="image/png">
   <link rel="stylesheet" href="../../styles.css?v=9">
-  <link rel="stylesheet" href="../../portfolio.css?v=1">
+  <link rel="stylesheet" href="../../portfolio.css?v=2">
 </head>
 <body>
   <a href="#main" class="skip">Skip to content</a>
@@ -25,14 +25,18 @@
   </header>
   <main id="main" class="wrap case-page">
     <a class="case-back text-link" href="../../#work">All projects</a>
+    <!-- Edit this page’s copy in the article below. -->
     <article>
       <header class="case-hero">
         <div>
-          <p class="case-kicker">Mobile robotics · 3D mapping</p>
+          <p class="case-kicker">LiDAR SLAM · Measured depth</p>
           <h1>iPhone LiDAR SLAM</h1>
           <p class="case-meta">Northeastern University · Robotics</p>
-          <p class="case-lead">I built a Swift app that streams measured iPhone LiDAR points to ROS 2. The backend estimates the phone’s motion and adds each registered scan to a global 3D map.</p>
-          <div class="case-links"><a class="text-link" href="https://github.com/MatthewKazan/iPhone-lidar-slam-playground">Project code and documentation</a><a class="text-link" href="../../#mapping">Try the browser demo</a></div>
+          <p class="case-lead">Walk around a room with the iPhone app and its LiDAR measures the surfaces around you. I built the Swift scanner and ROS 2 pipeline that assemble those measurements into a 3D map.</p>
+          <div class="case-links">
+            <a class="text-link" href="https://github.com/MatthewKazan/iPhone-lidar-slam-playground">Project code and notes</a>
+            <a class="text-link" href="../../#mapping">Try the browser demo</a>
+          </div>
         </div>
         <figure class="case-visual">
           <a href="../../assets/iphone-lidar-map.webp" aria-label="Open full-size image">
@@ -42,15 +46,18 @@
         </figure>
       </header>
       <section class="case-section">
-        <h2>Capture and scan registration</h2>
-        <p>ARKit supplies depth and camera intrinsics. The app back-projects the depth map and streams 3D points to separate ROS 2 capture and processing stages. Saved rosbags make it possible to replay a scan with the same inputs while changing registration settings.</p>
-        <p>I implemented configurable registration and descriptor interfaces and evaluated ICP and Deep Global Registration on point clouds.</p>
+        <h2>From a sensor reading to a registered scan</h2>
+        <p>The app uses ARKit depth and camera intrinsics to back-project each frame into 3D points. I stream the points to ROS 2 and record them in bags so I can rerun the same walk with different registration settings.</p>
+        <p>Each new scan is aligned against the local map to estimate where the phone moved. I built a common registration interface to compare ICP and Deep Global Registration on the same point clouds.</p>
       </section>
       <section class="case-section">
-        <h2>Loop closure and map correction</h2>
-        <p>Scan Context and NDT-Transformer descriptors suggest revisits. Geometric verification supplies relative pose measurements. The resulting GTSAM factor graph uses odometry and loop constraints to refine the phone’s trajectory with Levenberg–Marquardt.</p>
-        <p><strong>Browser Camera mode is approximate.</strong> The website receives only RGB video and estimates depth. The native app uses measured LiDAR depth.</p>
+        <h2>Recognizing a place the phone has already seen</h2>
+        <p>Small alignment errors accumulate as the scan grows. Scan Context and NDT-Transformer descriptors propose matches to earlier views, and geometric verification checks whether the scans line up. I add the verified constraints to a GTSAM factor graph and use the optimized poses to rebuild the map.</p>
       </section>
+      <aside class="camera-depth-note case-note" aria-label="Camera mode limitation">
+        <strong>Browser Camera mode builds a rough map from estimated depth.</strong>
+        <p>The browser gets RGB video. The native Swift app reads the iPhone’s LiDAR and uses measured depth for mapping.</p>
+      </aside>
     </article>
   </main>
   <footer>

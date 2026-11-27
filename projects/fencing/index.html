@@ -8,7 +8,7 @@
   <title>Wireless Fencing Scoring · Matthew Kazan</title>
   <link rel="icon" href="../../assets/mk.png" type="image/png">
   <link rel="stylesheet" href="../../styles.css?v=9">
-  <link rel="stylesheet" href="../../portfolio.css?v=1">
+  <link rel="stylesheet" href="../../portfolio.css?v=2">
 </head>
 <body>
   <a href="#main" class="skip">Skip to content</a>
@@ -25,14 +25,17 @@
   </header>
   <main id="main" class="wrap case-page">
     <a class="case-back text-link" href="../../#work">All projects</a>
+    <!-- Edit this page’s copy in the article below. -->
     <article>
       <header class="case-hero">
         <div>
           <p class="case-kicker">Embedded systems · iOS</p>
           <h1>Wireless Fencing Scoring</h1>
           <p class="case-meta">Personal project · December 2020</p>
-          <p class="case-lead">I prototyped wearable devices that register épée touches and a Swift app that displays and edits the score.</p>
-          <div class="case-links"><a class="text-link" href="https://github.com/MatthewKazan/Bluetooth-Fencing-Scoring-System">Hardware and firmware repository</a></div>
+          <p class="case-lead">I fence épée and wanted a portable way to keep score. I prototyped wearable touch detectors and built a Swift app to run the clock and keep track of the bout.</p>
+          <div class="case-links">
+            <a class="text-link" href="https://github.com/MatthewKazan/Bluetooth-Fencing-Scoring-System">Hardware and firmware repository</a>
+          </div>
         </div>
         <figure class="case-visual">
           <a href="../../assets/fencing-circuit.webp" aria-label="Open full-size image">
@@ -43,11 +46,11 @@
       </header>
       <section class="case-section">
         <h2>Touch detection hardware</h2>
-        <p>Each device connects to the fencer’s standard body cord. I designed the sensing circuit, wrote microcontroller firmware, and modeled a 3D-printed enclosure.</p>
+        <p>Each detector plugs into a standard épée body cord. I designed the ESP32 sensing circuit with a buzzer and LED for touch feedback, wrote the firmware, and modeled a wearable enclosure for 3D printing.</p>
       </section>
       <section class="case-section">
         <h2>Scorekeeping interface</h2>
-        <p>The Swift app displays and edits scores through Firebase Realtime Database. Bringing the hardware and app together required debugging the sensor input, timing, and communication paths.</p>
+        <p>I built a Swift interface for reading and editing scores through Firebase Realtime Database. Getting a touch from the blade to the screen meant debugging the circuit, timing, and software together.</p>
       </section>
     </article>
   </main>

@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111722">
-  <meta name="description" content="I’m building a visual pose pipeline that starts with image correspondences and estimates how the camera moved. I wrote the C++ geometry backend, rendered training data, and built PyTorch models for matching and graph optimization.">
+  <meta name="description" content="Matthew Kazan’s visual pose research covers learned image matching, a C++ solver with analytic pose-graph Jacobians, and Transformer experiments on RGB-D data.">
   <title>Learned Visual Pose · Matthew Kazan</title>
   <link rel="icon" href="../../assets/mk.png" type="image/png">
   <link rel="stylesheet" href="../../styles.css?v=9">
-  <link rel="stylesheet" href="../../portfolio.css?v=1">
+  <link rel="stylesheet" href="../../portfolio.css?v=2">
 </head>
 <body>
   <a href="#main" class="skip">Skip to content</a>
@@ -25,14 +25,17 @@
   </header>
   <main id="main" class="wrap case-page">
     <a class="case-back text-link" href="../../#work">All projects</a>
+    <!-- Edit this page’s copy in the article below. -->
     <article>
       <header class="case-hero">
         <div>
-          <p class="case-kicker">Computer vision · Machine learning</p>
+          <p class="case-kicker">Visual pose research · Learned image matching</p>
           <h1>Learned Visual Pose</h1>
           <p class="case-meta">Independent research · Ongoing</p>
-          <p class="case-lead">I’m building a visual pose pipeline that starts with image correspondences and estimates how the camera moved. I wrote the C++ geometry backend, rendered training data, and built PyTorch models for matching and graph optimization.</p>
-          <div class="case-links"><a class="text-link" href="https://github.com/MatthewKazan/learned_visual_pose">Project code and documentation</a></div>
+          <p class="case-lead">Given a pair of RGB-D images, can a model learn which details to trust when estimating camera motion? I built the pipeline end to end so I could test that question, from rendering training data to deriving the geometry and training the models.</p>
+          <div class="case-links">
+            <a class="text-link" href="https://github.com/MatthewKazan/learned_visual_pose">Project code and notes</a>
+          </div>
         </div>
         <figure class="case-visual">
           <video controls playsinline preload="metadata" width="1280" height="776" poster="../../assets/learned-visual-pose-poster.webp" aria-label="Learned Visual Pose pipeline in Rerun">
@@ -43,46 +46,60 @@
         </figure>
       </header>
       <section class="case-section">
-        <h2>Pose derivation and C++ geometry</h2>
-        <p>I implemented SO(3) and SE(3) operations in C++ and Eigen. For a metric pose, the pipeline back-projects matched pixels using their depth, then uses RANSAC and Kabsch to fit the rigid transform. I also implemented an essential-matrix branch for monocular pose up to scale.</p>
-        <p>I derived the pose-graph residual and its analytic Jacobians for left-multiplicative updates. The logarithm maps each edge’s pose error into a six-dimensional tangent vector. The optimizer assembles the Gauss–Newton system from those Jacobians, edge information matrices, and Huber weights.</p>
+        <h2>From image matches to camera motion</h2>
+        <p>I wrote the geometry backend in C++ and Eigen, including the SO(3) and SE(3) operations. I back-project matched pixels into 3D with their depth, then fit the rigid motion between frames with RANSAC and Kabsch. An essential-matrix branch recovers monocular motion up to scale.</p>
+        <p>To connect those pairwise motions into a trajectory, I derived the pose-graph residual and its analytic Jacobians for left-multiplicative updates. The logarithm gives a six-dimensional error per edge. Those Jacobians, edge information matrices, and Huber weights form the Gauss–Newton system.</p>
         <div class="case-equations" aria-label="Pose graph residual and Jacobians">
           <code>r<sub>ij</sub> = Log(Z<sub>ij</sub><sup>−1</sup> T<sub>i</sub><sup>−1</sup> T<sub>j</sub>)</code>
           <code>T<sub>i</sub> ← Exp(δξ<sub>i</sub>) T<sub>i</sub></code>
           <code>J<sub>j</sub> = J<sub>r</sub>(r<sub>ij</sub>)<sup>−1</sup> Ad(T<sub>j</sub><sup>−1</sup>), J<sub>i</sub> = −J<sub>j</sub></code>
         </div>
-        <p><var>T</var><sub>i</sub> and <var>T</var><sub>j</sub> are camera-to-world poses. The measured transform <var>Z</var><sub>ij</sub> maps frame <var>j</var> into frame <var>i</var>, and the adjoint carries pose perturbations into the residual’s coordinate frame.</p>
+        <p><var>T</var><sub>i</sub> and <var>T</var><sub>j</sub> are camera-to-world poses. The measured transform <var>Z</var><sub>ij</sub> maps frame <var>j</var> into frame <var>i</var>. The adjoint carries the pose updates into the residual’s coordinate frame.</p>
       </section>
       <section class="case-section">
-        <h2>Rendering and correspondence training</h2>
+        <h2>Rendering data and training the CNN</h2>
         <div class="case-columns">
-          <div><h3>RGB-D dataset rendering</h3><p>I built a Habitat-Sim renderer that plans camera walks on HM3D navigation meshes. It records synchronized RGB, metric depth, and ground-truth poses, then prepares keyframes and shared-visibility labels for graph training.</p></div>
-          <div><h3>Convolutional descriptors</h3><p>I trained a dilated CNN to produce normalized 128-dimensional descriptors. TartanAir depth and poses provide same-point labels across views. A symmetric InfoNCE loss trains the descriptors to distinguish true matches from other points in the image pair.</p></div>
+          <div>
+            <h3>Rendering camera trajectories</h3>
+            <p>I built a Habitat-Sim renderer that plans camera walks through HM3D scenes and saves RGB, metric depth, and ground-truth poses together. From these runs I prepare keyframes and label which views share visible scene geometry for graph training.</p>
+          </div>
+          <div>
+            <h3>Learning which pixels match</h3>
+            <p>I trained a dilated CNN in PyTorch to produce 128-dimensional descriptors. TartanAir depth and poses tell me which pixels see the same 3D point, and a symmetric InfoNCE loss teaches the network to pull those matches together.</p>
+            <p>In my architecture sweeps, widening the receptive field from 15 to 79 pixels made the biggest difference to matching accuracy.</p>
+          </div>
         </div>
       </section>
       <section class="case-section">
-        <h2>Transformer experiments</h2>
-        <p>I trained a pose-graph refiner on noisy trajectories using pose and measurement tokens, 3D geometry, and visual features. It predicts pose corrections in SE(3). My current experiments train a graph-generation Transformer to learn correspondence and relative-pose measurements from RGB-D keyframes with supervision through a differentiable Gauss–Newton solve.</p>
+        <h2>Training Transformers on pose graphs</h2>
+        <p>My first Transformer learned to correct noisy pose graphs. I trained it on simulated trajectories with poses, edge measurements, 3D geometry, and visual features as inputs. It predicts corrections in SE(3) across the trajectory.</p>
+        <p>I’m now training a model that learns how to build the graph itself from RGB-D keyframes. It predicts image correspondences and relative poses. A differentiable Gauss–Newton solve lets me supervise those predictions by the trajectory they produce together.</p>
       </section>
       <section class="case-section">
-        <h2>Evaluation</h2>
+        <h2>What I measured</h2>
         <dl class="case-benchmarks">
-          <div><dt>70.74%</dt><dd>CNN matches within 8 pixels versus 58.20% for SIFT on one held-out TartanAir sequence.</dd></div>
-          <div><dt>48% lower</dt><dd>Mean trajectory error versus robust Gauss–Newton in a separate Transformer experiment on 100 validation graphs with injected faults.</dd></div>
+          <div>
+            <dt>70.74%</dt>
+            <dd>CNN matches within 8 pixels versus 58.20% for SIFT on one held-out TartanAir sequence.</dd>
+          </div>
+          <div>
+            <dt>48% lower</dt>
+            <dd>Mean trajectory error versus robust Gauss–Newton in a separate Transformer experiment on 100 validation graphs with injected faults.</dd>
+          </div>
         </dl>
         <div class="case-figures">
           <figure class="case-visual">
-          <a href="../../assets/vision-matching.webp" aria-label="Open full-size image">
-            <img src="../../assets/vision-matching.webp" width="1450" height="1009" loading="lazy" alt="Matched image points from SIFT and the trained CNN on the same indoor image pair.">
-          </a>
-          <figcaption>SIFT and CNN matches for the same image pair. <a href="https://theairlab.org/tartanair-dataset/#term-of-use">TartanAir</a> by Wang et al. · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>
-        </figure>
+            <a href="../../assets/vision-matching.webp" aria-label="Open full-size image">
+              <img src="../../assets/vision-matching.webp" width="1450" height="1009" loading="lazy" alt="Matched image points from SIFT and the trained CNN on the same indoor image pair.">
+            </a>
+            <figcaption>SIFT and CNN matches for the same image pair. Source images by Wang et al. <a href="https://theairlab.org/tartanair-dataset/#term-of-use">TartanAir</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>
+          </figure>
           <figure class="case-visual">
-          <a href="../../assets/vision-trajectory.webp" aria-label="Open full-size image">
-            <img src="../../assets/vision-trajectory.webp" width="1200" height="361" loading="lazy" alt="Estimated and reference camera paths with translation and rotation error plots.">
-          </a>
-          <figcaption>Estimated trajectory and errors for the classical geometry baseline. <a href="https://theairlab.org/tartanair-dataset/#term-of-use">TartanAir</a> by Wang et al. · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>
-        </figure>
+            <a href="../../assets/vision-trajectory.webp" aria-label="Open full-size image">
+              <img src="../../assets/vision-trajectory.webp" width="1200" height="361" loading="lazy" alt="Estimated and reference camera paths with translation and rotation error plots.">
+            </a>
+            <figcaption>Estimated trajectory and errors for the classical geometry baseline. Reference trajectory by Wang et al. <a href="https://theairlab.org/tartanair-dataset/#term-of-use">TartanAir</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>
+          </figure>
         </div>
       </section>
     </article>

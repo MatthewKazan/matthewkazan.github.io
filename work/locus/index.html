@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111722">
-  <meta name="description" content="I build ground-truth measurement and simulation tools for mobile manipulation, and use them to diagnose failures across planning, controls, and hardware.">
+  <meta name="description" content="Motion-capture ground truth, ROS 2 simulation, and regression testing for mobile manipulation at Locus Robotics.">
   <title>Locus Robotics · Matthew Kazan</title>
   <link rel="icon" href="../../assets/mk.png" type="image/png">
   <link rel="stylesheet" href="../../styles.css?v=9">
-  <link rel="stylesheet" href="../../portfolio.css?v=1">
+  <link rel="stylesheet" href="../../portfolio.css?v=2">
 </head>
 <body>
   <a href="#main" class="skip">Skip to content</a>
@@ -25,29 +25,34 @@
   </header>
   <main id="main" class="wrap case-page">
     <a class="case-back text-link" href="../../#experience">All experience</a>
+    <!-- Edit this page’s copy in the article below. -->
     <article>
       <header class="case-hero">
         <div>
           <p class="case-kicker">Robotics Test Engineer</p>
           <h1>Locus Robotics</h1>
           <p class="case-meta">July 2025–present</p>
-          <p class="case-lead">I build ground-truth measurement and simulation tools for mobile manipulation, and use them to diagnose failures across planning, controls, and hardware.</p>
-          <div class="case-links"><a class="text-link" href="https://locusrobotics.com/locusone/fleet/locus-array">Locus Array</a></div>
+          <p class="case-lead">How closely does a warehouse robot’s estimated pose match where it actually is? I build the ground-truth and simulation tools that help us answer that for mobile manipulators and track down the source of the error.</p>
+          <div class="case-links">
+            <a class="text-link" href="https://locusrobotics.com/locusone/fleet/locus-array">Locus Array</a>
+          </div>
         </div>
         <figure class="case-visual">
           <a href="../../assets/locus-array.webp" aria-label="Open full-size image">
-            <img src="../../assets/locus-array.webp" width="800" height="800" alt="Locus Array mobile manipulation robot with its arm extended in a warehouse aisle.">
+            <img src="../../assets/locus-array.webp" width="800" height="800" alt="Locus Array mobile manipulation robot centered between tall shelves in a warehouse aisle.">
           </a>
           <figcaption>Locus Array in a warehouse aisle. <a href="https://locusrobotics.com/locusone/fleet/locus-array">Photo by Locus Robotics</a>.</figcaption>
         </figure>
       </header>
       <section class="case-section">
-        <h2>Motion-capture ground truth</h2>
-        <p>I built a framework to evaluate six-degree-of-freedom localization and positioning. SVD plane fitting establishes a reference surface, swing–twist decomposition separates tilt and heading, and left-invariant pose error measures deviation. The system reports uncertainty, bias, repeatability, and spatial error in an internal web app in near real time.</p>
+        <h2>Measuring localization and positioning</h2>
+        <p>I built a six-degree-of-freedom motion-capture reference to evaluate localization and positioning. I fit reference planes with SVD, separate tilt from heading with swing–twist decomposition, and compute left-invariant pose error to compare the robot’s pose with ground truth.</p>
+        <p>I put the results into an internal web app so the team can see uncertainty, bias, repeatability, and where errors occur on the floor as we run tests.</p>
       </section>
       <section class="case-section">
-        <h2>Simulation infrastructure</h2>
-        <p>I integrated simulated IMU, odometry, camera, LiDAR, and transform data with the production localization stack in Gazebo and ROS 2 Jazzy. I designed the Docker setup for local and cloud runs, with pytest regression tests, gz-web integration, and a common CLI.</p>
+        <h2>Running the production stack in simulation</h2>
+        <p>I integrated simulated cameras, LiDAR, IMU, odometry, and frame transforms with production localization in Gazebo and ROS 2 Jazzy. I set up Docker for local and cloud runs and built pytest regressions, a shared CLI, and a browser view through gz-web.</p>
+        <p>I also worked on bringing a simulated arm into the stack, including how to model its perception inputs and connect its controls.</p>
       </section>
     </article>
   </main>

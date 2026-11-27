@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111722">
-  <meta name="description" content="Matthew Kazan’s engineering portfolio. Explore an interactive SLAM map, learned visual pose estimation, warehouse robotics, and hardware automation.">
+  <meta name="description" content="Matthew Kazan’s work in robotics, machine learning, and perception. Explore visual pose research, iPhone LiDAR mapping, and mobile robot localization.">
   <title>Matthew Kazan · Robotics &amp; Perception</title>
   <link rel="preconnect" href="https://huggingface.co" crossorigin>
   <script>
@@ -30,7 +30,7 @@
   <script type="module" src="./src/preload-depth.js?v=13" async></script>
   <link rel="icon" href="./assets/mk.png" type="image/png">
   <link rel="stylesheet" href="./styles.css?v=9">
-  <link rel="stylesheet" href="./portfolio.css?v=1">
+  <link rel="stylesheet" href="./portfolio.css?v=2">
   <script type="module" src="./src/app.js?v=17"></script>
 </head>
 <body>
@@ -142,64 +142,133 @@
       <p>The browser receives RGB video only. The native iPhone app reads real LiDAR depth for a more accurate reconstruction.</p>
     </aside>
 
+    <!-- Edit the homepage Projects, Experience, and Background copy below. -->
+
+    <!-- Projects -->
     <section class="wrap portfolio-section" id="work" aria-labelledby="work-title">
       <h2 id="work-title">Projects</h2>
-      <a class="portfolio-feature" href="./projects/learned-visual-pose/">
-        <div>
-          <p class="case-kicker">Computer vision · Machine learning</p>
+
+      <article class="portfolio-story project-lead">
+        <div class="story-copy">
+          <p class="case-kicker">Visual pose research · Learned image matching</p>
           <h3>Learned Visual Pose</h3>
-          <p>I derived and implemented pose estimation in C++/Eigen, rendered RGB-D training data, and trained image descriptors. I’m now developing Transformers for pose graphs.</p>
-          <span class="text-link">Explore the project</span>
+          <p>How much better can a robot estimate its motion if it learns which parts of two images correspond?</p>
+          <p>I derived the pose solver, built a renderer for training data, and trained a CNN for image matching. I’m now training Transformers to build and refine the pose graphs that connect those estimates.</p>
+          <a class="story-link" href="./projects/learned-visual-pose/">Explore the research <span aria-hidden="true">→</span></a>
         </div>
-        <img src="./assets/learned-visual-pose-poster.webp" width="1280" height="776" loading="lazy" alt="Rerun view of the visual pose pipeline with a colored reconstruction, camera views, and depth images.">
-      </a>
+        <figure class="story-figure">
+          <img src="./assets/vision-matching.webp" width="1450" height="1009" loading="lazy" alt="Side-by-side SIFT and learned feature correspondences between two TartanAir views.">
+          <figcaption>SIFT and my CNN matching features across the same pair of images. <a href="https://theairlab.org/tartanair-dataset/#term-of-use">TartanAir</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>
+        </figure>
+      </article>
 
-      <div class="portfolio-grid">
-        <a class="portfolio-card" href="./projects/iphone-lidar/">
-          <img src="./assets/iphone-lidar-map.webp" width="1280" height="718" loading="lazy" alt="A room-scale point cloud captured using the native iPhone LiDAR pipeline.">
-          <div><h3>iPhone LiDAR SLAM</h3><p>A Swift scanner and a ROS 2 pipeline that register measured LiDAR scans into a 3D map.</p></div>
-        </a>
-        <a class="portfolio-card" href="./projects/sensor-fusion/">
-          <img class="contain" src="./assets/sensor-fusion-yaw.webp" width="862" height="468" loading="lazy" alt="Yaw traces from the gyroscope, magnetometer, IMU, and complementary filter during a recorded drive.">
-          <div><h3>ROS 2 Sensor Fusion</h3><p>Fused gyroscope and magnetometer signals for heading and checked inertial velocity against GPS.</p></div>
-        </a>
-        <a class="portfolio-card" href="./projects/balancing-robot/">
-          <img class="contain" src="./assets/ppo-robot.webp" width="1050" height="680" loading="lazy" alt="CAD model of the two-wheeled robot used for balance experiments.">
-          <div><h3>Self-Balancing Robot</h3><p>Modeled a two-wheel robot in CAD and trained a PPO controller to balance it in simulation.</p></div>
-        </a>
-        <a class="portfolio-card" href="./projects/fencing/">
-          <img class="contain" src="./assets/fencing-circuit.webp" width="960" height="624" loading="lazy" alt="Circuit diagram of the ESP32, épée connection, buzzer, and indicator LED.">
-          <div><h3>Wireless Fencing Scoring</h3><p>Prototyped wearable épée touch detectors and a Swift scorekeeping app.</p></div>
-        </a>
+      <article class="portfolio-story fencing-story">
+        <div class="story-copy">
+          <p class="case-kicker">Embedded systems · Personal project</p>
+          <h3>Wireless Fencing Scoring</h3>
+          <p>I fence épée, so I built a scoring prototype I’d want to practice with. Wearable ESP32 touch detectors send events to a Swift app for timing and scorekeeping.</p>
+          <a class="story-link" href="./projects/fencing/">See the circuit and app <span aria-hidden="true">→</span></a>
+        </div>
+        <img class="story-image" src="./assets/fencing-circuit.webp" width="960" height="624" loading="lazy" alt="Circuit diagram for the wearable detector’s ESP32, épée connection, buzzer, and LED.">
+      </article>
+
+      <article class="portfolio-story lidar-story">
+        <div class="story-copy">
+          <p class="case-kicker">LiDAR SLAM · Measured depth</p>
+          <h3>iPhone LiDAR SLAM</h3>
+          <p>I built a Swift scanner that streams 3D points measured by the iPhone’s LiDAR to ROS 2. The pipeline aligns each scan to the map, recognizes revisited places, and uses GTSAM to correct accumulated drift.</p>
+          <a class="story-link" href="./projects/iphone-lidar/">Follow a scan through the pipeline <span aria-hidden="true">→</span></a>
+        </div>
+        <figure class="story-figure">
+          <img src="./assets/iphone-lidar-map.webp" width="1280" height="718" loading="lazy" alt="A height-colored room-scale point cloud built from native iPhone LiDAR scans.">
+          <figcaption>A room mapped from real iPhone LiDAR scans.</figcaption>
+        </figure>
+      </article>
+
+      <div class="project-pair">
+        <article class="portfolio-story compact-project">
+          <div class="story-copy">
+            <h3>ROS 2 Sensor Fusion</h3>
+            <p>I fused gyroscope and magnetometer readings for heading, then used GPS to see how quickly inertial velocity drifted.</p>
+            <a class="story-link" href="./projects/sensor-fusion/">See the driving data <span aria-hidden="true">→</span></a>
+          </div>
+          <img class="story-image" src="./assets/sensor-fusion-yaw.webp" width="862" height="468" loading="lazy" alt="Gyroscope, magnetometer, IMU, and combined yaw traces from a recorded drive.">
+        </article>
+        <article class="portfolio-story compact-project">
+          <div class="story-copy">
+            <h3>Self-Balancing Robot</h3>
+            <p>I designed a two-wheel robot in CAD and trained a PPO policy to balance it with simulated wheel torque.</p>
+            <a class="story-link" href="./projects/balancing-robot/">See the model and controller <span aria-hidden="true">→</span></a>
+          </div>
+          <img class="story-image" src="./assets/ppo-robot.webp" width="1050" height="680" loading="lazy" alt="CAD model of the two-wheeled robot used for the balance experiments.">
+        </article>
       </div>
     </section>
 
-    <section class="wrap portfolio-section" id="experience" aria-labelledby="experience-title">
-      <h2 id="experience-title">Experience</h2>
-      <div class="portfolio-grid roles">
-        <a class="portfolio-card" href="./work/locus/">
-          <img src="./assets/locus-array.webp" width="800" height="800" loading="lazy" alt="Locus Array mobile manipulation robot in a warehouse aisle.">
-          <div><p class="case-kicker">Robotics Test Engineer</p><h3>Locus Robotics</h3><p>Built motion-capture ground truth and simulation tooling to measure localization and positioning accuracy.</p></div>
-        </a>
-        <a class="portfolio-card" href="./work/twelve/">
-          <img src="./assets/twelve-test-cell.webp" width="664" height="443" loading="lazy" alt="Twelve team member holding a CO₂ electrolysis test cell in a lab.">
-          <div><p class="case-kicker">Hardware Automation Co-op</p><h3>Twelve</h3><p>Built hardware-in-the-loop tests, instrument software, and recovery tools for CO₂ electrolysis test stands.</p></div>
-        </a>
-        <a class="portfolio-card" href="./work/kythera/">
-          <img src="./assets/kythera-satcom.webp" width="1200" height="800" loading="lazy" alt="Kythera illustration of a satellite communications network above the Earth.">
-          <div><p class="case-kicker">Software Engineering Co-op</p><h3>Kythera Space Solutions</h3><p>Developed REST APIs, C++ libraries, and integration tooling for satellite communications optimization.</p></div>
-        </a>
+    <!-- Experience -->
+    <section class="portfolio-section experience-section" id="experience" aria-labelledby="experience-title">
+      <div class="wrap">
+        <h2 id="experience-title">Experience</h2>
+
+        <article class="portfolio-story lead-role">
+          <div class="story-copy">
+            <p class="case-kicker">Robotics Test Engineer · July 2025–present</p>
+            <h3>Locus Robotics</h3>
+            <p>I build ways to measure how precisely a warehouse robot localizes and positions itself for a task. My motion-capture system gives us a six-degree-of-freedom reference with a near-real-time view of bias and repeatability.</p>
+            <p>I also built simulation and regression tools around the production ROS 2 stack to reproduce failures and trace them across perception, planning, and controls.</p>
+            <a class="story-link" href="./work/locus/">See how I test mobile manipulation <span aria-hidden="true">→</span></a>
+          </div>
+          <img class="story-image" src="./assets/locus-array.webp" width="800" height="800" loading="lazy" alt="Locus Array mobile manipulation robot centered between tall shelves in a warehouse aisle.">
+        </article>
+
+        <div class="role-pair">
+          <article class="portfolio-story supporting-role">
+            <img class="story-image" src="./assets/twelve-test-cell.webp" width="664" height="443" loading="lazy" alt="Twelve team member holding a CO₂ electrolysis test cell in a lab.">
+            <div class="story-copy">
+              <p class="case-kicker">Hardware Automation Co-op</p>
+              <h3>Twelve</h3>
+              <p>I automated CO₂ electrolysis test stands, from controlling instruments and flagging data anomalies to restoring the test software after an interruption.</p>
+              <a class="story-link" href="./work/twelve/">Explore the test stands <span aria-hidden="true">→</span></a>
+            </div>
+          </article>
+          <article class="portfolio-story supporting-role">
+            <img class="story-image" src="./assets/kythera-satcom.webp" width="1200" height="800" loading="lazy" alt="Kythera illustration of a satellite communications network above the Earth.">
+            <div class="story-copy">
+              <p class="case-kicker">Software Engineering Co-op</p>
+              <h3>Kythera Space Solutions</h3>
+              <p>I built REST endpoints and C++ libraries for satellite network optimization, then added database fixtures and integration checks to make the service easier to test.</p>
+              <a class="story-link" href="./work/kythera/">Explore the software <span aria-hidden="true">→</span></a>
+            </div>
+          </article>
+        </div>
       </div>
     </section>
 
+    <!-- Background -->
     <section class="wrap portfolio-section" id="background" aria-labelledby="background-title">
       <h2 id="background-title">Background</h2>
-      <nav class="background-links" aria-label="Background">
-        <a href="./about/">About me</a>
-        <a href="./education/">Education</a>
-        <a href="./skills/">Skills</a>
-        <a href="./interests/">Interests</a>
-      </nav>
+      <div class="background-content">
+        <div class="background-intro">
+          <h3>I like figuring out what a robot can learn from what it sees.</h3>
+          <p>At Locus, I measure how well robots localize and position themselves. On my own time, I keep coming back to visual pose. I like deriving an update on paper, rendering scenes to test it, and seeing exactly where the estimate starts to drift.</p>
+          <p>I’m looking for robotics research and applied machine learning roles in perception and SLAM.</p>
+          <a class="story-link" href="./about/">More about me <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="background-index">
+          <div>
+            <h3><a href="./education/">Education <span aria-hidden="true">→</span></a></h3>
+            <p>M.S. in AI and B.S. in Computer Science from Northeastern, with graduate work in robotics and agent-based systems.</p>
+          </div>
+          <div>
+            <h3><a href="./skills/">Skills <span aria-hidden="true">→</span></a></h3>
+            <p>How I use C++, Python, PyTorch, and ROS 2 across geometry, model training, and robot testing.</p>
+          </div>
+          <div>
+            <h3><a href="./interests/">Interests <span aria-hidden="true">→</span></a></h3>
+            <p>Épée fencing, hands-on builds, and the math behind camera motion.</p>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
   <footer>
